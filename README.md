@@ -7,7 +7,19 @@ Personal credit card reconciliation tool
 - [Agentic development workflow](development-workflow.md)
 - [Private project board](https://github.com/users/nullabletype/projects/2)
 
-## Prototype phase
+## .NET coding standards
+
+The root `.editorconfig` is generated unchanged by the .NET 10 SDK's `dotnet new editorconfig` template. `Directory.Build.props` enables nullable reference types, implicit usings, built-in .NET 10 default analysers, and build-time code-style analysis for projects underneath the repository root. `global.json` selects SDK 10.0.301 with stable patch updates in the same feature band.
+
+Once a project or solution exists, restore it, build it, and run the following check with its actual path:
+
+```sh
+dotnet format <project-or-solution> --verify-no-changes --no-restore --severity info
+```
+
+The explicit severity includes suggestion-level style rules. No StyleCop or third-party formatting convention is added. Prototype CI must run this gate alongside the build and LikeC4 checks.
+
+## Prototype work
 
 The prototype phase precedes detailed production planning. Follow the issues and their native dependencies on GitHub:
 

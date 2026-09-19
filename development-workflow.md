@@ -49,7 +49,7 @@ Persist enough state to resume an interrupted run: issue, branch and commit, att
 
 ## Validation gates
 
-- Builds and agreed static analysis checks pass.
+- Builds and the built-in .NET 10 default analyser checks pass. The SDK-generated root EditorConfig is the style authority; `Directory.Build.props` supplies shared defaults. After restore, run `dotnet format <project-or-solution> --verify-no-changes --no-restore --severity info` to check formatting and suggestion-level style. Prototype CI must enforce this gate when projects are added.
 - Approved financial examples and generated invariant checks pass, including duplicates, reimbursements, minimum balances, refunds, and shortfalls.
 - Settlement, locking, reopening, corrections, and restart behaviour are verified.
 - Persistence, migration, interrupted writes, encryption failure cases, and backup/restore are verified.
