@@ -5,7 +5,11 @@ Personal credit card reconciliation tool
 
 - [Product specification](spec-file.md)
 - [Agentic development workflow](development-workflow.md)
-- [Private project board](https://github.com/users/nullabletype/projects/2)
+- [Project board](https://github.com/users/nullabletype/projects/2)
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
 
 ## .NET coding standards
 

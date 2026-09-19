@@ -38,11 +38,26 @@ ScaffoldingReadMe.txt
 
 # dotenv environment variables file
 .env
+.env.*
+!.env.example
+
+# Keys, certificates, and secrets
+*.key
+*.pem
+*.pfx
+*.p12
+*.cer
+*.crt
 
 # Others
 ~$*
 *~
+._*
+Thumbs.db
 CodeCoverage/
+.idea/
+.vscode/
+*.suo
 
 # MSBuild Binary and Structured Log
 *.binlog
@@ -60,4 +75,21 @@ nunit-*.xml
 .DS_Store
 **/node_modules/
 .agent-runs/
+.local/
+Library/
 *.user
+
+# Private runtime data & financial exports: keep real imports here, never in test fixtures
+private-data/
+backups/
+*.csv
+*.tsv
+*.ofx
+*.qif
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+
