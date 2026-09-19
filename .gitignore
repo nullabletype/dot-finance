@@ -55,3 +55,9 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# Desktop files and development tooling
+.DS_Store
+**/node_modules/
+.agent-runs/
+*.user
