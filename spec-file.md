@@ -109,6 +109,8 @@ Preserve completed reconciliation dates, transaction sets, allocations, totals, 
 
 Show totals by funding account, purchases by category, separate reporting-category subtotals within their funding sources, transfer amounts and direction, shortfalls, and projected personal balances. Use British pound formatting.
 
+Support dark and light modes throughout the application, including transaction tables, dialogs, warnings, and history. Provide a theme setting with System, Light, and Dark options, defaulting to System, and remember the selection across restarts. Maintain readable contrast and distinguish funding shortfalls, validation errors, and completion states in either theme without relying on colour alone. Include both themes in the UI prototype review.
+
 ## Encryption and backups
 
 Encrypt the working database and backups using the same user-provided password. Unlock once per app session. Advise the user to retain the password securely. No recovery service: make clear at setup that losing the password means losing access to the encrypted data.
