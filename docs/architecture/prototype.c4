@@ -1,0 +1,36 @@
+specification {
+  element actor
+  element system
+  element component
+}
+
+model {
+  user = actor 'Desktop user'
+  prototype = system 'Experimental desktop shell' {
+    description 'Disposable issue #1 experiment. No banking connections, imports, calculations or persistence.'
+    ui = component 'Synthetic summary window' {
+      technology 'Avalonia / .NET 10'
+      description 'Displays fictional constants using the operating system desktop backend.'
+    }
+    evidence = component 'Opt-in launch evidence' {
+      description 'Smoke mode captures a rendered window and OS metadata to local artifacts, then exits.'
+    }
+    ui -> evidence 'Signals native window opened in smoke mode'
+  }
+  build = system 'Development build tooling' {
+    description 'Node and LikeC4 validate diagrams and generate private build artifacts. Not shipped with the application.'
+  }
+  user -> prototype.ui 'Views synthetic summary locally'
+  build -> prototype 'Builds and publishes the desktop experiment'
+}
+
+views {
+  view index {
+    title 'EXPERIMENTAL — desktop build foundation'
+    include *
+  }
+  view shell of prototype {
+    title 'EXPERIMENTAL — implemented shell only'
+    include *
+  }
+}

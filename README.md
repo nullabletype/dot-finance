@@ -33,4 +33,15 @@ The prototype phase precedes detailed production planning. Follow the issues and
 4. [Agent-loop failure handling and recovery](https://github.com/nullabletype/dot-finance/issues/4)
 5. [Owner decision gate before production planning](https://github.com/nullabletype/dot-finance/issues/5)
 
-This repository currently contains the specification and prototype setup, not an implemented application or running controller. Build scripts, CI, and generated LikeC4 diagrams are deliverables of the prototype tickets. All development uses synthetic financial data; the shipped application must remain offline.
+The first disposable desktop shell and build pipeline are under [prototypes/DesktopShell](prototypes/DesktopShell/README.md). All displayed amounts are fictional constants. There is no importer, financial engine, persistence, payment integration, or running agent controller.
+
+With .NET 10 SDK (see `global.json`) and Node 22.22.3 or newer installed:
+
+```sh
+npm ci
+npm run build
+npm run smoke
+npm start
+```
+
+The full build validates and generates LikeC4 documentation, restores locked .NET dependencies, builds, checks formatting, and publishes a framework-dependent desktop prototype. Smoke mode needs a graphical desktop; on Linux use `xvfb-run -a npm run smoke` in CI. All development uses synthetic financial data; the shipped application must remain offline.
