@@ -7,30 +7,50 @@ specification {
 model {
   user = actor 'Desktop user'
   prototype = system 'Experimental desktop shell' {
-    description 'Disposable issue #1 experiment. No banking connections, imports, calculations or persistence.'
-    ui = component 'Synthetic summary window' {
+    description 'Disposable issues #1 and #2 experiment. Entirely local; no banking connections, calculations or payment operations.'
+    ui = component 'Synthetic summary and vault window' {
       technology 'Avalonia / .NET 10'
-      description 'Displays fictional constants using the operating system desktop backend.'
+      description 'Displays fictional constants and runs the password-unlocked synthetic persistence round trip.'
+    }
+    importer = component 'Bounded synthetic CSV importer' {
+      technology 'CsvHelper'
+      description 'Reads the committed fictional fixture under explicitly recorded, unverified Emma format assumptions.'
+    }
+    vault = component 'Experimental encrypted vault' {
+      technology 'Microsoft.Data.Sqlite and SQLCipher'
+      description 'Persists one JSON state document in an encrypted SQLite database and makes validated atomic backup and restore replacements.'
     }
     evidence = component 'Opt-in launch evidence' {
-      description 'Smoke mode captures a rendered window and OS metadata to local artifacts, then exits.'
+      description 'Smoke modes capture native launch metadata and synthetic encrypted round-trip evidence to local artifacts.'
     }
     ui -> evidence 'Signals native window opened in smoke mode'
+    ui -> importer 'Imports committed synthetic fixture'
+    ui -> vault 'Unlocks, saves, reloads, backs up and restores'
+    evidence -> importer 'Loads identical synthetic state on each OS'
+    evidence -> vault 'Moves and verifies encrypted backup across OS jobs'
+  }
+  localfiles = system 'User-selected local files' {
+    description 'Encrypted working database and portable encrypted backup. The synthetic source CSV is development-only plaintext.'
   }
   build = system 'Development build tooling' {
     description 'Node and LikeC4 validate diagrams and generate local/CI build artifacts. Not shipped with the application.'
   }
   user -> prototype.ui 'Views synthetic summary locally'
+  prototype.vault -> localfiles 'Atomically writes encrypted files'
   build -> prototype 'Builds and publishes the desktop experiment'
 }
 
 views {
   view index {
-    title 'EXPERIMENTAL — desktop build foundation'
+    title 'EXPERIMENTAL — offline desktop and encrypted persistence'
     include *
   }
   view shell of prototype {
-    title 'EXPERIMENTAL — implemented shell only'
+    title 'EXPERIMENTAL — implemented shell and persistence components'
     include *
+  }
+  view persistence {
+    title 'EXPERIMENTAL — encrypted save and portable backup flow'
+    include user, prototype.ui, prototype.importer, prototype.vault, prototype.evidence, localfiles
   }
 }
