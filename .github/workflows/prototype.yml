@@ -1,0 +1,51 @@
+name: Prototype validation
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    name: Desktop and architecture (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.15.0'
+          cache: npm
+      - run: npm ci
+      - name: Linux desktop prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb libice6 libsm6 libfontconfig1 libx11-6 libxext6 libxrender1
+      - run: npm run build
+      - name: Native launch (Linux virtual display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run smoke
+      - name: Native launch (macOS and Windows)
+        if: runner.os != 'Linux'
+        run: npm run smoke
+      - name: Preserve evidence and build outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prototype-${{ matrix.os }}-${{ github.sha }}
+          path: |
+            artifacts/architecture/
+            artifacts/desktop/
+            artifacts/launch-*/
+            artifacts/build.json
+          retention-days: 7
+          if-no-files-found: error
