@@ -18,6 +18,7 @@ Single domain context, described in `docs/agents/domain.md`, with the spec as th
 
 ## Execution rules
 
+- Use current, supported releases for all dependencies and tooling, including transitive packages, SDKs, runtimes, GitHub Actions, runner images, and container/base images. Verify upstream support status and applicable security updates when selecting or updating versions and before acceptance; do not rely on a major-version tag, a successful build, or a forced runtime override as evidence of support. Keep reproducible pins and lockfiles current. Unsupported or deprecated dependencies block acceptance; see `development-workflow.md`.
 - Use the SDK-generated root `.editorconfig` and `Directory.Build.props` for .NET coding standards. Keep the built-in .NET 10 default analyser set; do not introduce alternative style packages or project-level overrides without a stated reason.
 - Run `dotnet format <project-or-solution> --verify-no-changes --no-restore --severity info` after restore as the formatting/style gate. Build analysis does not enforce every suggestion-level style preference.
 
