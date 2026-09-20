@@ -1,0 +1,3 @@
+ID,Date,Amount,Account,Bank,Currency,Category,Subcategory,Type,Tags,Counterparty,Custom Name,Merchant,Additional details,Notes,Linked transaction ID
+SYNTH-0001,2026-09-01,-42.35,Fictional Card,Example Bank,GBP,Groceries,Supermarket,Purchase,weekly,Example Market,,Example Market Ltd,"Synthetic, quoted detail",Fictional purchase,
+SYNTH-0002,2026-09-03,15.00,Fictional Card,Example Bank,GBP,Shopping,Returns,Refund,refund,Example Shop,,Example Shop Ltd,Synthetic refund,Fictional refund,SYNTH-0001

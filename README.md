@@ -33,7 +33,7 @@ The prototype phase precedes detailed production planning. Follow the issues and
 4. [Agent-loop failure handling and recovery](https://github.com/nullabletype/dot-finance/issues/4)
 5. [Owner decision gate before production planning](https://github.com/nullabletype/dot-finance/issues/5)
 
-The first disposable desktop shell and build pipeline are under [prototypes/DesktopShell](prototypes/DesktopShell/README.md). All displayed amounts are fictional constants. There is no importer, financial engine, persistence, payment integration, or running agent controller.
+The disposable desktop experiments are under [prototypes/DesktopShell](prototypes/DesktopShell/README.md). All displayed amounts and imported records are fictional. Issue #2 adds a bounded synthetic CSV importer and provisional SQLCipher persistence/backup path; there is no financial engine, payment integration, production importer, or running agent controller.
 
 With .NET 10 SDK (see `global.json`) and Node 22.22.3 or newer installed:
 
@@ -41,7 +41,8 @@ With .NET 10 SDK (see `global.json`) and Node 22.22.3 or newer installed:
 npm ci
 npm run build
 npm run smoke
+npm run persistence:smoke
 npm start
 ```
 
-The full build validates and generates LikeC4 documentation, restores locked .NET dependencies, builds, checks formatting, and publishes a framework-dependent desktop prototype. Smoke mode needs a graphical desktop; on Linux use `xvfb-run -a npm run smoke` in CI. All development uses synthetic financial data; the shipped application must remain offline.
+The full build validates and generates LikeC4 documentation, restores locked .NET dependencies, builds, tests, checks formatting, and publishes a framework-dependent desktop prototype. Smoke mode needs a graphical desktop; on Linux use `xvfb-run -a npm run smoke` in CI. The persistence smoke is non-graphical. All development uses synthetic financial data; the shipped application must remain offline.

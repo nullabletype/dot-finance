@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
 const project = 'prototypes/DesktopShell/DesktopShell.csproj';
+const tests = 'prototypes/DesktopShell.Tests/DesktopShell.Tests.csproj';
 // Invalidate a previous success before running any gates.
 rmSync('artifacts/build.json', { force: true });
 const commit = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' });
@@ -19,9 +20,10 @@ run(process.execPath, [cli, 'format', '--check', 'docs/architecture']);
 run(process.execPath, [cli, 'validate', 'docs/architecture']);
 run(process.execPath, ['scripts/check-invalid-model.mjs']);
 run(process.execPath, [cli, 'build', 'docs/architecture', '-o', 'artifacts/architecture', '--base', './']);
-run('dotnet', ['restore', project, '--locked-mode']);
+run('dotnet', ['restore', tests, '--locked-mode']);
 run('dotnet', ['build', project, '--no-restore', '--configuration', 'Release', '--warnaserror']);
-run('dotnet', ['format', project, '--verify-no-changes', '--no-restore', '--severity', 'info']);
+run('dotnet', ['test', tests, '--no-restore', '--configuration', 'Release', '--warnaserror']);
+run('dotnet', ['format', tests, '--verify-no-changes', '--no-restore', '--severity', 'info']);
 rmSync('artifacts/desktop', { recursive: true, force: true });
 run('dotnet', ['publish', project, '--no-build', '--configuration', 'Release', '--output', 'artifacts/desktop']);
 const endCommit = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' });

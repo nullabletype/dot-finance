@@ -16,7 +16,7 @@ public sealed class MainWindow : Window
         MinHeight = 540;
 
         StackPanel summary = new() { Spacing = 18, Margin = new Thickness(36) };
-        summary.Children.Add(new TextBlock { Text = "DOT-FINANCE / EXPERIMENT 01", FontSize = 14 });
+        summary.Children.Add(new TextBlock { Text = "DOT-FINANCE / EXPERIMENT 02", FontSize = 14 });
         StackPanel heading = new() { Orientation = Orientation.Horizontal, Spacing = 14 };
         heading.Children.Add(CreateIcon("M4 5H20V19H4Z M4 9H20 M8 14H12", 32));
         heading.Children.Add(new TextBlock { Text = "Reconciliation overview", FontSize = 32, FontWeight = FontWeight.SemiBold });
@@ -36,9 +36,52 @@ public sealed class MainWindow : Window
         summary.Children.Add(new Separator());
         summary.Children.Add(new TextBlock
         {
-            Text = "Preview only. These are fictional display values, not calculated transfers.\nImports, payments, account settings and storage are not implemented.",
+            Text = "Preview only. These are fictional display values, not calculated transfers.",
             TextWrapping = TextWrapping.Wrap
         });
+        summary.Children.Add(new Separator());
+        summary.Children.Add(new TextBlock
+        {
+            Text = "Encrypted persistence round trip",
+            FontSize = 22,
+            FontWeight = FontWeight.SemiBold
+        });
+        summary.Children.Add(new TextBlock
+        {
+            Text = "Enter a temporary prototype password. It remains in memory for this run and is not written to settings or logs.",
+            TextWrapping = TextWrapping.Wrap
+        });
+        TextBox password = new() { PlaceholderText = "Prototype password", PasswordChar = '●', MaxWidth = 420, HorizontalAlignment = HorizontalAlignment.Stretch };
+        summary.Children.Add(password);
+        TextBlock persistenceStatus = new() { Text = "Not run", TextWrapping = TextWrapping.Wrap };
+        Button runPersistence = new() { Content = "Import, save, restart and restore synthetic fixture", HorizontalAlignment = HorizontalAlignment.Left };
+        runPersistence.Click += (_, _) =>
+        {
+            if (string.IsNullOrWhiteSpace(password.Text))
+            {
+                persistenceStatus.Text = "Password required. No files changed.";
+                return;
+            }
+
+            runPersistence.IsEnabled = false;
+            try
+            {
+                string workspace = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "dot-finance", "experiment-02");
+                string fixture = Path.Combine(AppContext.BaseDirectory, "Fixtures", "synthetic-emma.csv");
+                persistenceStatus.Text = PersistenceScenario.RunLocalRoundTrip(workspace, fixture, password.Text);
+            }
+            catch (Exception exception)
+            {
+                persistenceStatus.Text = $"Round trip failed safely: {exception.Message}";
+            }
+            finally
+            {
+                password.Text = string.Empty;
+                runPersistence.IsEnabled = true;
+            }
+        };
+        summary.Children.Add(runPersistence);
+        summary.Children.Add(persistenceStatus);
         Content = new ScrollViewer { Content = summary };
     }
 
