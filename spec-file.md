@@ -84,7 +84,7 @@ If Joint or Shared Savings lacks available funds, show the shortfall and block c
 Provide a dashboard showing current progress and access to history. Initial workflow:
 
 1. Import.
-2. Review allocations, resolve required reviews, and enter current balances and the card payment target.
+2. Review allocations with live category totals alongside the transaction list, resolve required reviews, and enter current balances and the card payment target.
 3. Review transfers, discrepancies, and projected balances.
 4. Perform transfers outside the app and acknowledge each transfer separately.
 5. After required funding transfers are confirmed, pay the card balance outside the app and acknowledge “Card paid”.
@@ -109,6 +109,8 @@ Preserve completed reconciliation dates, transaction sets, allocations, totals, 
 
 Show totals by funding account, purchases by category, separate reporting-category subtotals within their funding sources, transfer amounts and direction, shortfalls, and projected personal balances. Use British pound formatting.
 
+While reviewing transactions, keep a category-totals sidebar visible alongside the transaction list, including while scrolling through transactions. Show running totals for the current reconciliation draft and update them immediately when an accepted transaction correction, allocation override, or rule change affects that draft, without requiring navigation to another screen or a manual refresh. Use the same draft state for the list and totals; unapplied rule-change previews must not replace the current totals. Include refunds using their signed effect and keep uncategorised amounts visible as requiring review. Preserve funding-source totals and separate reporting-category subtotals where applicable. A final confirmation/acknowledgement screen may summarise the agreed amounts, but does not replace the live totals during transaction review. Locked and completed amounts retain the existing immutability rules.
+
 Support dark and light modes throughout the application, including transaction tables, dialogs, warnings, and history. Provide a theme setting with System, Light, and Dark options, defaulting to System, and remember the selection across restarts. Maintain readable contrast and distinguish funding shortfalls, validation errors, and completion states in either theme without relying on colour alone. Include both themes in the UI prototype review.
 
 ## Encryption and backups
@@ -122,6 +124,8 @@ Support user-managed transfer of encrypted backup files between machines. The tr
 ## Testing
 
 Generate synthetic financial data; do not use real financial data for development or automated testing. Cover duplicate IDs, settled baseline imports, late imports, corrections, category and subcategory rules, overrides, personal-account reimbursements, refunds, negative contributions, payment-target discrepancies, protected minimums, insufficient funds, surplus reimbursements, locking, balance updates after transfers, reopening, and encrypted backup/restore.
+
+Verify that the category-totals sidebar remains visible during transaction review and scrolling, updates from the same draft state after accepted changes, and agrees with the final confirmation totals. Cover refunds, uncategorised transactions, and unapplied versus accepted rule-change previews. Include the sidebar in Light and Dark prototype review.
 
 ## Planning boundary
 
