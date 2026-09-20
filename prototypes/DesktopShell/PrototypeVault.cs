@@ -183,6 +183,9 @@ public sealed class PrototypeVault : IDisposable
     {
         if (string.Equals(Environment.GetEnvironmentVariable("DOT_FINANCE_CRASH_POINT"), point, StringComparison.Ordinal))
         {
+            string markerPath = Environment.GetEnvironmentVariable("DOT_FINANCE_CRASH_MARKER")
+                ?? throw new InvalidOperationException("DOT_FINANCE_CRASH_MARKER is required when injecting an abrupt interruption.");
+            File.WriteAllText(markerPath, point);
             Process.GetCurrentProcess().Kill();
             Thread.Sleep(Timeout.Infinite);
         }
