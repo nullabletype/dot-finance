@@ -19,12 +19,22 @@ function run(args) {
 }
 
 function interrupt(kind, crashPoint) {
+  const marker = `${root}/stage-a/interruption-${kind}.marker`;
+  rmSync(marker, { force: true });
   const result = spawnSync('dotnet', [assembly, '--persistence-interrupt', kind, `${root}/stage-a`, fixture], {
     stdio: 'ignore',
-    env: { ...process.env, DOT_FINANCE_PROTOTYPE_PASSWORD: password, DOT_FINANCE_CRASH_POINT: crashPoint }
+    env: {
+      ...process.env,
+      DOT_FINANCE_PROTOTYPE_PASSWORD: password,
+      DOT_FINANCE_CRASH_POINT: crashPoint,
+      DOT_FINANCE_CRASH_MARKER: marker
+    }
   });
   if (result.error && !result.signal) throw result.error;
   if (result.status === 0) throw new Error(`${kind} interruption unexpectedly completed`);
+  if (!existsSync(marker) || readFileSync(marker, 'utf8') !== crashPoint) {
+    throw new Error(`${kind} failed before reaching the requested interruption point`);
+  }
 }
 
 function sha256(path) {
