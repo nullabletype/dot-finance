@@ -18,7 +18,7 @@ model {
     ui -> evidence 'Signals native window opened in smoke mode'
   }
   build = system 'Development build tooling' {
-    description 'Node and LikeC4 validate diagrams and generate private build artifacts. Not shipped with the application.'
+    description 'Node and LikeC4 validate diagrams and generate local/CI build artifacts. Not shipped with the application.'
   }
   user -> prototype.ui 'Views synthetic summary locally'
   build -> prototype 'Builds and publishes the desktop experiment'
