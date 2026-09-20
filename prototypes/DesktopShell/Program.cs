@@ -12,6 +12,16 @@ internal static class Program
             return PersistenceScenario.RunCommand(args);
         }
 
+        if (args is ["--persistence-interrupt", ..])
+        {
+            return PersistenceScenario.RunInterruptionCommand(args);
+        }
+
+        if (args is ["--persistence-check-recovery", ..])
+        {
+            return PersistenceScenario.RunRecoveryCheckCommand(args);
+        }
+
         return AppBuilder.Configure<App>().UsePlatformDetect().StartWithClassicDesktopLifetime(args);
     }
 }

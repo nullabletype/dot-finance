@@ -24,7 +24,7 @@ Development restore requires package-registry access. The published app itself h
 - The working database and backup are both SQLCipher databases protected by the same password. The password is retained in process memory while a vault is open but is not written to app settings, evidence, logs, or files.
 - SQLite transactions protect saves. Backups are written as a sibling `.partial` file, validated, and atomically renamed; restore validates a sibling candidate before replacing working state.
 - Wrong passwords and SQLCipher-detected corruption produce a generic authentication/damage failure. They do not replace an existing working database.
-- `npm run persistence:smoke` performs create → reopen → backup → restore → backup → restore and writes only local evidence under `artifacts/persistence-local/`.
+- `npm run persistence:smoke` performs create → abrupt save interruption → recovery → abrupt backup interruption → recovery → two backup moves. It writes only local evidence under `artifacts/persistence-local/`.
 
 ### Alternatives considered
 
@@ -48,7 +48,7 @@ These assumptions are **not evidence of Emma's actual export format**. No real e
 
 ## Validation and evidence
 
-`npm run smoke` captures native launch evidence as described by issue #1. The persistence tests additionally cover exact restart/restore equality, wrong passwords, a tampered backup, cancellation before save commit, cancellation before backup replacement, and plaintext marker inspection.
+`npm run smoke` captures native launch evidence as described by issue #1. The persistence tests cover exact reopen/restore equality, wrong passwords, a tampered backup, cancellation before save commit, and cancellation before backup replacement. The persistence smoke abruptly terminates child processes before a save commit and after a backup is staged, then starts a new process to verify recovery. It confirms the complete backup hash did not change and the interrupted output remains visibly suffixed `.partial` rather than being presented as complete.
 
 CI runs the tests and local persistence smoke on all three OS families. A sequential job moves the encrypted backup macOS → Windows → Linux → macOS and compares the restored state digest at each stage. The Linux job also runs the persistence scenario in a network namespace with networking blocked and traces network syscalls; any socket/connect/send attempt fails the gate. Hosted evidence applies only after those jobs run for a clean commit.
 
@@ -60,7 +60,7 @@ Generated outputs include:
 - `artifacts/offline-network/`: Linux blocked-network trace in CI;
 - `artifacts/launch-*/` and `artifacts/build.json`: native launch and tested-source metadata.
 
-Byte-pattern inspection checks app-managed encrypted files for fixture IDs, merchant names, the supplied password, and the SQLite plaintext header. It is not a forensic audit of process memory, swap, filesystem snapshots, crash dumps, OS telemetry, or deleted blocks. The plaintext development fixture remains in the published prototype solely to make the disposable walkthrough repeatable.
+Byte-pattern inspection inventories every file in the app-managed scenario workspace—including interrupted journals and `.partial` files—and checks for fixture IDs, merchant names, and the supplied password. Encrypted database files are also checked for the SQLite plaintext header. The prototype emits no application log. This is not a forensic audit of process memory, swap, filesystem snapshots, crash dumps, OS telemetry, or deleted blocks. The plaintext development fixture sits outside the managed workspace and remains in the published prototype solely to make the disposable walkthrough repeatable.
 
 ## Current decision
 

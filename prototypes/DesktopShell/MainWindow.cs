@@ -48,13 +48,13 @@ public sealed class MainWindow : Window
         });
         summary.Children.Add(new TextBlock
         {
-            Text = "Enter a temporary prototype password. It remains in memory for this run and is not written to settings or logs.",
+            Text = "Enter a temporary prototype password. It remains in memory for this run and is not written to settings or logs. Keep it securely: losing it means losing access, and there is no recovery service.",
             TextWrapping = TextWrapping.Wrap
         });
         TextBox password = new() { PlaceholderText = "Prototype password", PasswordChar = '●', MaxWidth = 420, HorizontalAlignment = HorizontalAlignment.Stretch };
         summary.Children.Add(password);
         TextBlock persistenceStatus = new() { Text = "Not run", TextWrapping = TextWrapping.Wrap };
-        Button runPersistence = new() { Content = "Import, save, restart and restore synthetic fixture", HorizontalAlignment = HorizontalAlignment.Left };
+        Button runPersistence = new() { Content = "Import, save, reopen and restore synthetic fixture", HorizontalAlignment = HorizontalAlignment.Left };
         runPersistence.Click += (_, _) =>
         {
             if (string.IsNullOrWhiteSpace(password.Text))

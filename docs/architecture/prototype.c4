@@ -29,8 +29,8 @@ model {
     evidence -> importer 'Loads identical synthetic state on each OS'
     evidence -> vault 'Moves and verifies encrypted backup across OS jobs'
   }
-  localfiles = system 'User-selected local files' {
-    description 'Encrypted working database and portable encrypted backup. The synthetic source CSV is development-only plaintext.'
+  localfiles = system 'App-managed local experiment files' {
+    description 'Encrypted working database and portable encrypted backup under the prototype data folder. The synthetic source CSV is development-only plaintext.'
   }
   build = system 'Development build tooling' {
     description 'Node and LikeC4 validate diagrams and generate local/CI build artifacts. Not shipped with the application.'
