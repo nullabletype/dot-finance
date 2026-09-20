@@ -72,7 +72,7 @@ jobs:
         with:
           name: prototype-macos-latest-${{ github.sha }}
           path: build
-      - run: mkdir -p cycle && DOT_FINANCE_PROTOTYPE_PASSWORD=synthetic-ci-password-not-a-user-secret dotnet build/artifacts/desktop/DesktopShell.dll --persistence-cycle initialize cycle build/artifacts/desktop/Fixtures/synthetic-emma.csv
+      - run: mkdir -p cycle && DOT_FINANCE_PROTOTYPE_PASSWORD=synthetic-ci-password-not-a-user-secret dotnet build/desktop/DesktopShell.dll --persistence-cycle initialize cycle build/desktop/Fixtures/synthetic-emma.csv
       - uses: actions/upload-artifact@v4
         with:
           name: persistence-cycle-macos-${{ github.sha }}
@@ -96,7 +96,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force cycle | Out-Null
           $env:DOT_FINANCE_PROTOTYPE_PASSWORD = 'synthetic-ci-password-not-a-user-secret'
-          dotnet build/artifacts/desktop/DesktopShell.dll --persistence-cycle continue cycle build/artifacts/desktop/Fixtures/synthetic-emma.csv incoming/portable.dotfinance-backup
+          dotnet build/desktop/DesktopShell.dll --persistence-cycle continue cycle build/desktop/Fixtures/synthetic-emma.csv incoming/portable.dotfinance-backup
       - uses: actions/upload-artifact@v4
         with:
           name: persistence-cycle-windows-${{ github.sha }}
@@ -116,7 +116,7 @@ jobs:
         with:
           name: persistence-cycle-windows-${{ github.sha }}
           path: incoming
-      - run: mkdir -p cycle && DOT_FINANCE_PROTOTYPE_PASSWORD=synthetic-ci-password-not-a-user-secret dotnet build/artifacts/desktop/DesktopShell.dll --persistence-cycle continue cycle build/artifacts/desktop/Fixtures/synthetic-emma.csv incoming/portable.dotfinance-backup
+      - run: mkdir -p cycle && DOT_FINANCE_PROTOTYPE_PASSWORD=synthetic-ci-password-not-a-user-secret dotnet build/desktop/DesktopShell.dll --persistence-cycle continue cycle build/desktop/Fixtures/synthetic-emma.csv incoming/portable.dotfinance-backup
       - uses: actions/upload-artifact@v4
         with:
           name: persistence-cycle-linux-${{ github.sha }}
@@ -136,7 +136,7 @@ jobs:
         with:
           name: persistence-cycle-linux-${{ github.sha }}
           path: incoming
-      - run: mkdir -p cycle && DOT_FINANCE_PROTOTYPE_PASSWORD=synthetic-ci-password-not-a-user-secret dotnet build/artifacts/desktop/DesktopShell.dll --persistence-cycle verify cycle build/artifacts/desktop/Fixtures/synthetic-emma.csv incoming/portable.dotfinance-backup
+      - run: mkdir -p cycle && DOT_FINANCE_PROTOTYPE_PASSWORD=synthetic-ci-password-not-a-user-secret dotnet build/desktop/DesktopShell.dll --persistence-cycle verify cycle build/desktop/Fixtures/synthetic-emma.csv incoming/portable.dotfinance-backup
       - uses: actions/upload-artifact@v4
         with:
           name: persistence-cycle-final-${{ github.sha }}
