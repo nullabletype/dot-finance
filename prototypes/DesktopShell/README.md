@@ -2,6 +2,8 @@
 
 Question: can Avalonia/.NET 10 display a native desktop window on macOS, Windows, and Linux while the same build validates and generates LikeC4 documentation?
 
+The summary uses locally drawn vector icons alongside text labels; no icon downloads or additional packages are required. These presentation details do not change the LikeC4 architecture.
+
 This is disposable code. The summary amounts are fictional constants. It does not calculate transfers, import files, save financial data, or make network requests. Theme selection and persisted preferences belong to the later workflow experiment.
 
 ## Run from the repository root
