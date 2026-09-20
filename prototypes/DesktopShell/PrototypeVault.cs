@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Diagnostics;
 
 using Microsoft.Data.Sqlite;
 
@@ -119,6 +120,7 @@ public sealed class PrototypeVault : IDisposable
         command.Parameters.AddWithValue("$value", JsonSerializer.Serialize(state, JsonOptions));
         command.ExecuteNonQuery();
         progress?.Report(PersistenceStage.BeforeCommit);
+        CrashIfRequested("save-before-commit");
         cancellationToken.ThrowIfCancellationRequested();
         transaction.Commit();
     }
@@ -137,6 +139,7 @@ public sealed class PrototypeVault : IDisposable
             _connection.BackupDatabase(destination);
             Validate(destination);
             progress?.Report(PersistenceStage.BackupStaged);
+            CrashIfRequested("backup-staged");
             cancellationToken.ThrowIfCancellationRequested();
             destination.Close();
             File.Move(partialPath, backupPath, true);
@@ -173,6 +176,15 @@ public sealed class PrototypeVault : IDisposable
         if (!reader.Read() || !string.Equals(reader.GetString(0), "ok", StringComparison.Ordinal))
         {
             throw new SqliteException("Encrypted vault integrity check failed.", 11);
+        }
+    }
+
+    private static void CrashIfRequested(string point)
+    {
+        if (string.Equals(Environment.GetEnvironmentVariable("DOT_FINANCE_CRASH_POINT"), point, StringComparison.Ordinal))
+        {
+            Process.GetCurrentProcess().Kill();
+            Thread.Sleep(Timeout.Infinite);
         }
     }
 }
