@@ -58,17 +58,23 @@ export function run(directory, action, argument) {
     }
     state = JSON.parse(readFileSync(path, 'utf8'));
     if (state.status === 'stopped') return state;
-    if (state.activeSince !== null) {
-      state.elapsedMs += Math.max(0, Date.now() - state.activeSince);
-      state.activeSince = null;
-      invalidate(state, 'Interrupted command: rerun gate; unobserved time charged conservatively');
-    }
+    // Fingerprint precedes schema-dependent recovery: an older interrupted
+    // checkpoint must stop for review, not be interpreted as the new schema.
     if (state.policyHash !== policyHash()) {
       state.status = 'stopped';
       state.nextAction = 'Policy/controller changed: separate review and explicit new run required';
       save(path, state);
       return state;
-    } else if (state.commit !== current.commit || state.branch !== current.branch || current.dirty) {
+    }
+    if (state.activeSince !== null) {
+      const now = Date.now();
+      const intervalStart = state.workSince === null ? state.activeSince : Math.min(state.activeSince, state.workSince);
+      state.elapsedMs += Math.max(0, now - intervalStart);
+      if (state.workSince !== null) state.workSince = now;
+      state.activeSince = null;
+      invalidate(state, 'Interrupted command: rerun gate; unobserved time charged conservatively');
+    }
+    if (state.commit !== current.commit || state.branch !== current.branch || current.dirty) {
       invalidate(state, 'Source changed or dirty: rerun against a clean identified commit');
       state.commit = current.commit;
       state.branch = current.branch;
@@ -126,7 +132,7 @@ export function run(directory, action, argument) {
       if (state.correctionDue) throw new Error('Record correction before retrying a failed gate');
       if (current.dirty) throw new Error('Commit changes before collecting evidence');
       if (action === 'check' && !state.simulation) throw new Error('Synthetic check only allowed in a synthetic run');
-      if (!['pass', 'fail', 'interrupt', 'hang', undefined].includes(argument)) throw new Error('Unknown fixture mode');
+      if (!['pass', 'fail', 'fail-dirty', 'interrupt', 'hang', 'infrastructure', undefined].includes(argument)) throw new Error('Unknown fixture mode');
       // Erase old approval BEFORE launching a process, including a retry that crashes.
       invalidate(state, 'Validation executing');
       save(path, state);
@@ -138,6 +144,9 @@ export function run(directory, action, argument) {
       });
       const result = existsSync(receiptPath) ? JSON.parse(readFileSync(receiptPath, 'utf8')) :
         { status: null, error: { code: execution.error?.code || 'SUPERVISOR_FAILED' } };
+      const infrastructureFailure = result.status === 75 || result.error?.code === 'ENOENT';
+      // Failure debt is independent of whether this checkout can accept evidence.
+      state.correctionDue = (result.status !== 0 || Boolean(result.error)) && !infrastructureFailure;
       const after = identity();
       const evidencePath = resolve(directory, `validation-${state.events.length}.json`);
       const receipt = { commit: current.commit, command: [process.execPath, ...args], exit: result.status,
@@ -152,8 +161,7 @@ export function run(directory, action, argument) {
         state.gate = 'review';
         state.nextAction = 'Obtain independent review; synthetic success is not product acceptance';
       } else {
-        state.correctionDue = result.error?.code !== 'ENOENT';
-        state.status = result.error?.code === 'ENOENT' ? 'blocked' : 'failed';
+        state.status = infrastructureFailure ? 'blocked' : 'failed';
         state.nextAction = 'Inspect gate output; correct failure or resolve infrastructure';
       }
       event(state, 'validation', receipt);
@@ -175,7 +183,8 @@ export function run(directory, action, argument) {
     return state;
   } finally {
     if (state && started) {
-      state.elapsedMs += Date.now() - started;
+      // workSince already covers this command when an external interval is open.
+      if (state.workSince === null) state.elapsedMs += Date.now() - started;
       state.activeSince = null;
       if (state.elapsedMs >= policy.milliseconds) {
         state.status = 'stopped';

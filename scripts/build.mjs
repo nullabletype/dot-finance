@@ -12,7 +12,10 @@ if (commit.status !== 0 || status.status !== 0) throw new Error('Cannot identify
 const dirty = status.stdout.trim().length !== 0;
 function run(command, args) {
   const result = spawnSync(command, args, { stdio: 'inherit', shell: false });
-  if (result.error) throw result.error;
+  if (result.error) {
+    console.error(`Infrastructure failure launching ${command}: ${result.error.code}`);
+    process.exit(75); // Structured infrastructure exit, still a failing build gate.
+  }
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 const cli = 'node_modules/likec4/bin/likec4.mjs';

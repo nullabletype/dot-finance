@@ -47,6 +47,17 @@ try {
   assert.equal(step('retry-debt', 'check', 'pass', 'blocked').status, 1);
   assert.equal(read('retry-debt').attempts, 0);
   assert.equal(read('retry-debt').correctionDue, true);
+  step('failure-and-mutation', 'init', 'synthetic');
+  const mutated = step('failure-and-mutation', 'check', 'fail-dirty');
+  try {
+    assert.equal(read('failure-and-mutation').status, 'failed');
+    assert.equal(read('failure-and-mutation').correctionDue, true);
+  } finally {
+    unlinkSync(resolve(`.controller-trial-dirty-${mutated.pid}`));
+  }
+  assert.equal(step('failure-and-mutation', 'check', 'pass', 'failed').status, 1);
+  step('failure-and-mutation', 'correct', undefined, 'pending');
+  step('failure-and-mutation', 'check', 'pass', 'pending');
 
   step('interruption', 'init', 'synthetic');
   const killed = step('interruption', 'check', 'interrupt');
@@ -91,6 +102,13 @@ try {
   seed('policy', state => { state.policyHash = 'different-policy'; });
   step('policy', 'status', undefined, 'stopped');
   step('policy', 'check', 'pass', 'stopped');
+  step('old-schema', 'init', 'synthetic');
+  seed('old-schema', state => {
+    state.policyHash = 'old-controller';
+    state.activeSince = Date.now();
+    delete state.blockers;
+  });
+  step('old-schema', 'status', undefined, 'stopped');
 
   step('limits', 'init', 'synthetic');
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -106,6 +124,19 @@ try {
   step('external-time', 'begin-work');
   seed('external-time', state => { state.workSince -= 90 * 60 * 1000; });
   step('external-time', 'status', undefined, 'stopped');
+  step('overlapping-time', 'init', 'synthetic');
+  seed('overlapping-time', state => {
+    const now = Date.now();
+    state.workSince = now - 60000;
+    state.activeSince = now - 30000;
+  });
+  step('overlapping-time', 'end-work', undefined, 'pending');
+  assert.ok(read('overlapping-time').elapsedMs >= 60000);
+  assert.ok(read('overlapping-time').elapsedMs < 65000, 'Overlapping intervals must be charged once');
+  step('infrastructure', 'init', 'synthetic');
+  step('infrastructure', 'check', 'infrastructure', 'blocked');
+  assert.equal(read('infrastructure').correctionDue, false);
+  step('infrastructure', 'check', 'pass', 'pending');
   step('deadline', 'init', 'synthetic');
   seed('deadline', state => { state.elapsedMs = 90 * 60 * 1000 - 1000; });
   step('deadline', 'check', 'hang', 'stopped');
