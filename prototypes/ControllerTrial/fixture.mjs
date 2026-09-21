@@ -1,5 +1,6 @@
 // Deliberate synthetic failure, never a substitute for repository validation.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
 const mode = process.argv[2];
 console.log(`Synthetic controller gate: ${mode}`);
 process.exitCode = mode === 'fail' ? 1 : 0;
@@ -14,3 +15,11 @@ if (mode === 'hang') {
   setInterval(() => {}, 1000);
 }
 if (mode === 'leaf') setInterval(() => {}, 1000);
+if (mode === 'infrastructure') {
+  const result = spawnSync('dot-finance-controller-deliberately-unavailable-tool');
+  process.exitCode = result.error?.code === 'ENOENT' ? 75 : 1;
+}
+if (mode === 'fail-dirty') {
+  writeFileSync(`.controller-trial-dirty-${Number(process.argv[3])}`, 'Synthetic checkout mutation\n', { flag: 'wx' });
+  process.exitCode = 1;
+}
