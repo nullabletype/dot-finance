@@ -35,6 +35,15 @@ model {
   build = system 'Development build tooling' {
     description 'Node and LikeC4 validate diagrams and generate local/CI build artifacts. Not shipped with the application.'
   }
+  controller = system 'EXPERIMENTAL manual controller trial' {
+    description 'Disposable issue #4 development-only Node harness. Runs fixed validation commands; persists budgets, source identity, evidence hashes and events. Synthetic approval has no acceptance authority.'
+  }
+  runfiles = system 'Controller scratch state and receipts' {
+    description 'Local single-writer checkpoints and command output, separate from financial data. Missing or changed evidence invalidates progress; changed policy requires review.'
+  }
+  user -> controller 'Manually invokes bounded synthetic trials'
+  controller -> build 'Invokes fixed full-build entry point'
+  controller -> runfiles 'Checkpoints before execution and validates receipts on resume'
   user -> prototype.ui 'Views synthetic summary locally'
   prototype.vault -> localfiles 'Atomically writes encrypted files'
   build -> prototype 'Builds and publishes the desktop experiment'
