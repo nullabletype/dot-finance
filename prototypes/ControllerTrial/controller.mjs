@@ -9,7 +9,7 @@ const source = fileURLToPath(import.meta.url);
 const root = resolve(dirname(source), '../..');
 const policy = { corrections: 3, milliseconds: 90 * 60 * 1000, gates: ['validation', 'review'] };
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
-const policyHash = () => hash(readFileSync(source));
+const policyHash = () => hash(Buffer.concat([readFileSync(source), readFileSync(resolve(dirname(source), 'supervisor.mjs'))]));
 function git(...args) {
   const result = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
   if (result.status !== 0) throw new Error('Cannot identify source checkout');
@@ -29,7 +29,7 @@ function event(state, type, detail) {
 function invalidate(state, reason) {
   state.evidence = {};
   state.gate = 'validation';
-  state.status = 'pending';
+  state.status = state.correctionDue ? 'failed' : state.blockers.length ? 'blocked' : 'pending';
   state.nextAction = reason;
   event(state, 'invalidated', reason);
 }
@@ -51,7 +51,7 @@ export function run(directory, action, argument) {
       if (existsSync(path)) throw new Error('Run already exists; resume it instead');
       state = { issue: 4, ...current, policyHash: policyHash(), attempts: 0, elapsedMs: 0,
         activeSince: null, gate: 'validation', status: 'pending', evidence: {}, events: [],
-        nextAction: 'Run check or build', simulation: argument === 'synthetic' };
+        nextAction: 'Run check or build', simulation: argument === 'synthetic', correctionDue: false, blockers: [], workSince: null };
       event(state, 'started', 'Manual disposable trial; no acceptance or merge authority');
       save(path, state);
       return state;
@@ -66,10 +66,10 @@ export function run(directory, action, argument) {
     if (state.policyHash !== policyHash()) {
       state.status = 'stopped';
       state.nextAction = 'Policy/controller changed: separate review and explicit new run required';
+      save(path, state);
+      return state;
     } else if (state.commit !== current.commit || state.branch !== current.branch || current.dirty) {
-      const wasFailed = state.status === 'failed';
       invalidate(state, 'Source changed or dirty: rerun against a clean identified commit');
-      if (wasFailed) state.status = 'failed';
       state.commit = current.commit;
       state.branch = current.branch;
       state.dirty = current.dirty;
@@ -80,7 +80,10 @@ export function run(directory, action, argument) {
         break;
       }
     }
-    if (state.elapsedMs >= policy.milliseconds || state.attempts >= policy.corrections) {
+    const externalActiveMs = state.workSince === null ? 0 : Math.max(0, Date.now() - state.workSince);
+    if (state.elapsedMs + externalActiveMs >= policy.milliseconds || state.attempts >= policy.corrections) {
+      state.elapsedMs += externalActiveMs;
+      state.workSince = null;
       state.status = 'stopped';
       state.nextAction = 'Budget exhausted: owner decision and explicit renewal required';
     }
@@ -91,36 +94,50 @@ export function run(directory, action, argument) {
     started = Date.now();
     state.activeSince = started;
     save(path, state); // Durable before any potentially interrupted operation.
-    if (action === 'ambiguity') {
+    if (state.workSince !== null && action !== 'end-work') throw new Error('End the active work interval before another action');
+    if (action === 'begin-work') {
+      state.workSince = started;
+      event(state, 'work-started', 'Active investigation/correction interval, including across restarts');
+    } else if (action === 'end-work') {
+      if (state.workSince === null) throw new Error('No active work interval');
+      state.elapsedMs += Math.max(0, started - state.workSince);
+      state.workSince = null;
+      event(state, 'work-ended', 'External active time charged to shared budget');
+    } else if (action === 'ambiguity') {
       state.status = 'stopped';
       state.nextAction = `Owner decision required: ${argument || 'unresolved product ambiguity'}`;
       event(state, 'ambiguity', state.nextAction);
     } else if (action === 'unavailable') {
+      if (!argument) throw new Error('Name the unavailable platform');
+      if (!state.blockers.includes(argument)) state.blockers.push(argument);
       state.status = 'blocked';
       state.nextAction = `Platform evidence pending: ${argument || 'unavailable runner'}`;
       event(state, 'runner-unavailable', state.nextAction);
     } else if (action === 'correct') {
-      if (state.status !== 'failed') throw new Error('Correction requires a failed gate');
+      if (!state.correctionDue) throw new Error('Correction requires a failed gate');
       state.attempts++;
+      state.correctionDue = false;
       invalidate(state, 'Correction recorded; rerun validation and review');
       if (state.attempts >= policy.corrections) {
         state.status = 'stopped';
         state.nextAction = 'Three corrections reached: stop for owner decision';
       }
     } else if (action === 'check' || action === 'build') {
-      if (state.status === 'failed') throw new Error('Record correction before retrying a failed gate');
+      if (state.correctionDue) throw new Error('Record correction before retrying a failed gate');
       if (current.dirty) throw new Error('Commit changes before collecting evidence');
       if (action === 'check' && !state.simulation) throw new Error('Synthetic check only allowed in a synthetic run');
-      if (!['pass', 'fail', 'interrupt', undefined].includes(argument)) throw new Error('Unknown fixture mode');
+      if (!['pass', 'fail', 'interrupt', 'hang', undefined].includes(argument)) throw new Error('Unknown fixture mode');
       // Erase old approval BEFORE launching a process, including a retry that crashes.
       invalidate(state, 'Validation executing');
       save(path, state);
-      const args = action === 'build' ? ['scripts/build.mjs'] :
-        ['prototypes/ControllerTrial/fixture.mjs', argument || 'pass'];
-      const result = spawnSync(process.execPath, args, {
-        cwd: root, encoding: 'utf8', timeout: Math.max(1, policy.milliseconds - state.elapsedMs), maxBuffer: 16 * 1024 * 1024,
+      const receiptPath = resolve(directory, `process-${state.events.length}.json`);
+      const args = ['prototypes/ControllerTrial/supervisor.mjs', action, argument || 'pass', String(process.pid),
+        String(Math.max(1, policy.milliseconds - state.elapsedMs)), receiptPath];
+      const execution = spawnSync(process.execPath, args, {
+        cwd: root, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024,
       });
-      if (argument === 'interrupt') process.kill(process.pid, 'SIGKILL');
+      const result = existsSync(receiptPath) ? JSON.parse(readFileSync(receiptPath, 'utf8')) :
+        { status: null, error: { code: execution.error?.code || 'SUPERVISOR_FAILED' } };
       const after = identity();
       const evidencePath = resolve(directory, `validation-${state.events.length}.json`);
       const receipt = { commit: current.commit, command: [process.execPath, ...args], exit: result.status,
@@ -131,10 +148,11 @@ export function run(directory, action, argument) {
       if (after.commit !== current.commit || after.dirty || after.branch !== current.branch) {
         invalidate(state, 'Checkout changed during validation');
       } else if (result.status === 0 && !result.error) {
-        state.status = 'pending';
+        state.status = state.blockers.length ? 'blocked' : 'pending';
         state.gate = 'review';
         state.nextAction = 'Obtain independent review; synthetic success is not product acceptance';
       } else {
+        state.correctionDue = result.error?.code !== 'ENOENT';
         state.status = result.error?.code === 'ENOENT' ? 'blocked' : 'failed';
         state.nextAction = 'Inspect gate output; correct failure or resolve infrastructure';
       }
@@ -143,10 +161,11 @@ export function run(directory, action, argument) {
       if (state.gate !== 'review' || state.status !== 'pending') throw new Error('Review requires passing validation');
       if (!argument) throw new Error('Review rejection requires a reference');
       state.status = 'failed';
+      state.correctionDue = true;
       state.nextAction = 'Address independent review then record correction';
       event(state, 'review-rejected', argument);
     } else if (action === 'trial-approve') {
-      if (!state.simulation || state.gate !== 'review' || state.status !== 'pending') throw new Error('Approval is synthetic-trial only after validation');
+      if (!state.simulation || state.gate !== 'review' || state.status !== 'pending' || state.correctionDue || state.blockers.length) throw new Error('Approval is synthetic-trial only after validation without outstanding blockers');
       state.status = 'trial-passed';
       state.nextAction = 'Synthetic routing only; independent review and acceptance remain external gates';
       event(state, 'synthetic-review-approved', state.nextAction);

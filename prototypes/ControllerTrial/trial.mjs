@@ -1,7 +1,7 @@
 // Repeatable adversarial experiment, not a production acceptance test suite.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const base = resolve('artifacts/controller', new Date().toISOString().replaceAll(':', '-'));
@@ -39,10 +39,27 @@ try {
   step('failure', 'trial-approve', undefined, 'trial-passed');
   assert.equal(read('failure').attempts, 2);
 
+  step('retry-debt', 'init', 'synthetic');
+  step('retry-debt', 'check', 'fail', 'failed');
+  unlinkSync(read('retry-debt').evidence.validation.path);
+  assert.equal(step('retry-debt', 'check', 'pass', 'failed').status, 1);
+  step('retry-debt', 'unavailable', 'Windows', 'blocked');
+  assert.equal(step('retry-debt', 'check', 'pass', 'blocked').status, 1);
+  assert.equal(read('retry-debt').attempts, 0);
+  assert.equal(read('retry-debt').correctionDue, true);
+
   step('interruption', 'init', 'synthetic');
   const killed = step('interruption', 'check', 'interrupt');
   assert.equal(killed.signal, 'SIGKILL');
   assert.notEqual(read('interruption').activeSince, null);
+  const processReceipt = resolve(base, 'interruption', 'process-2.json');
+  const deadline = Date.now() + 5000;
+  while (!existsSync(processReceipt) && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  const interrupted = JSON.parse(readFileSync(processReceipt, 'utf8'));
+  assert.equal(interrupted.reason, 'controller-interrupted');
+  assert.throws(() => process.kill(interrupted.pid, 0), { code: 'ESRCH' });
   // spawnSync has reaped this child, so its lock is now demonstrably stale.
   unlinkSync(resolve(base, 'interruption', 'writer.lock'));
   step('interruption', 'status', undefined, 'pending');
@@ -51,6 +68,8 @@ try {
 
   step('runner', 'init', 'synthetic');
   step('runner', 'unavailable', 'Windows runner deliberately unavailable', 'blocked');
+  assert.equal(step('runner', 'trial-approve', undefined, 'blocked').status, 1);
+  step('runner', 'check', 'pass', 'blocked');
   assert.equal(step('runner', 'trial-approve', undefined, 'blocked').status, 1);
 
   step('changed-source', 'init', 'synthetic');
@@ -67,6 +86,8 @@ try {
   assert.equal(read('tampered-evidence').gate, 'validation');
 
   step('policy', 'init', 'synthetic');
+  step('policy', 'check', 'pass');
+  unlinkSync(read('policy').evidence.validation.path);
   seed('policy', state => { state.policyHash = 'different-policy'; });
   step('policy', 'status', undefined, 'stopped');
   step('policy', 'check', 'pass', 'stopped');
@@ -81,6 +102,25 @@ try {
   step('time', 'init', 'synthetic');
   seed('time', state => { state.elapsedMs = 90 * 60 * 1000; });
   step('time', 'check', 'pass', 'stopped');
+  step('external-time', 'init', 'synthetic');
+  step('external-time', 'begin-work');
+  seed('external-time', state => { state.workSince -= 90 * 60 * 1000; });
+  step('external-time', 'status', undefined, 'stopped');
+  step('deadline', 'init', 'synthetic');
+  seed('deadline', state => { state.elapsedMs = 90 * 60 * 1000 - 1000; });
+  step('deadline', 'check', 'hang', 'stopped');
+  const timedOut = JSON.parse(readFileSync(resolve(base, 'deadline', 'process-2.json'), 'utf8'));
+  assert.equal(timedOut.reason, 'deadline');
+  assert.throws(() => process.kill(timedOut.pid, 0), { code: 'ESRCH' });
+  const grandchild = Number(timedOut.stdout.match(/Grandchild PID: (\d+)/)[1]);
+  const reapDeadline = Date.now() + 5000;
+  let grandchildAlive = true;
+  while (grandchildAlive && Date.now() < reapDeadline) {
+    try { process.kill(grandchild, 0); }
+    catch { grandchildAlive = false; }
+    if (grandchildAlive) await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  assert.equal(grandchildAlive, false, 'Timed-out descendant must not remain alive');
   step('ambiguity', 'init', 'synthetic');
   step('ambiguity', 'ambiguity', 'Financial semantics need owner input', 'stopped');
   step('ambiguity', 'check', 'pass', 'stopped');

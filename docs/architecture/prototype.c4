@@ -36,7 +36,7 @@ model {
     description 'Node and LikeC4 validate diagrams and generate local/CI build artifacts. Not shipped with the application.'
   }
   controller = system 'EXPERIMENTAL manual controller trial' {
-    description 'Disposable issue #4 development-only Node harness. Runs fixed validation commands; persists budgets, source identity, evidence hashes and events. Synthetic approval has no acceptance authority.'
+    description 'Disposable issue #4 development-only Node harness and process supervisor. Runs fixed validation commands with deadline and controller-liveness monitoring; persists budgets, source identity, evidence hashes and events. Synthetic approval has no acceptance authority.'
   }
   runfiles = system 'Controller scratch state and receipts' {
     description 'Local single-writer checkpoints and command output, separate from financial data. Missing or changed evidence invalidates progress; changed policy requires review.'
