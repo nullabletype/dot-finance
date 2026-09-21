@@ -1,6 +1,6 @@
 # Maintained encrypted-storage replacement
 
-- **Status:** Feasibility work required before owner selection
+- **Status:** Snapshot feasibility experiment approved; storage selection pending evidence
 - **Issue:** [#12](https://github.com/nullabletype/dot-finance/issues/12)
 - **Checked:** 2026-09-21
 Constraints confirmed by owner: maintained open-source dependencies only; alternatives may replace SQLite entirely.
@@ -160,15 +160,17 @@ After the owner defines the workload/thresholds and approves the comparison, cre
 
 Keep #3, #4 and #5 blocked until the selected replacement implementation—not this research alone—passes those gates.
 
-## Owner inputs still required
+## Owner-approved feasibility parameters
 
-Before opening the comparative prototype, confirm:
+Recorded 2026-09-21:
 
-1. expected years of retained history and a conservative upper bound for imported transactions;
-2. required history searches/filters and acceptable response times;
-3. acceptable unlock, save, automatic-backup and restore latency;
-4. whether a single running application instance is an acceptable product constraint; and
-5. whether to wait for a current SQLite3MC package or first test snapshots alone, while keeping selection open.
+1. Retain and benchmark **20 years / 100,000 synthetic transactions**.
+2. Search all displayed transaction fields—date, amount, account, bank, category, type, counterparty, merchant and notes—plus reconciliation and settlement status.
+3. On the slowest supported test machine: search under **1 second**, unlock under **3 seconds**, save under **3 seconds**, and automatic backup under **15 seconds**.
+4. Version one may enforce **one running application instance/writer per vault** with an exclusive lock.
+5. Run the snapshot feasibility experiment now. Keep storage selection open; compare SQLite3MC only after its official package contains the current supported native release.
+
+These are experiment gates, not product defaults or a storage-selection decision. Passing them permits an owner decision; it does not itself approve the custom envelope for production.
 
 ## Architecture impact of this research
 
