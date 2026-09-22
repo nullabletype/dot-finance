@@ -35,9 +35,30 @@ model {
   build = system 'Development build tooling' {
     description 'Node and LikeC4 validate diagrams and generate local/CI build artifacts. Not shipped with the application.'
   }
+  snapshottrial = system 'EXPERIMENTAL authenticated snapshot trial' {
+    description 'Disposable issue #13 feasibility experiment; not selected application storage. Tests a BCL PBKDF2/AES-GCM envelope, one writer, immutable generations, in-memory search and portable backups with fictional data.'
+    session = component 'Vault session API' {
+      technology '.NET 10'
+      description 'Unlocks once, retains a derived session key, saves authenticated generations, searches loaded state, rotates passwords and creates or restores backups.'
+    }
+    envelope = component 'Versioned authenticated envelope' {
+      technology 'PBKDF2-HMAC-SHA-256 / AES-256-GCM'
+      description 'Authenticates canonical metadata and encrypted synthetic state; a format experiment requiring independent security review.'
+    }
+    benchmark = component 'Synthetic history and fault trial' {
+      description 'Exercises 100,000 fictional transactions against agreed latency, recovery, tamper and portability gates.'
+    }
+    session -> envelope 'Derives keys and authenticates complete snapshots'
+    benchmark -> session 'Exercises the public vault-session seam'
+  }
+  snapshotfiles = system 'Snapshot trial scratch files' {
+    description 'Immutable authenticated generations, active-generation pointer, writer lock and portable backup. Disposable synthetic evidence only.'
+  }
   user -> prototype.ui 'Views synthetic summary locally'
   prototype.vault -> localfiles 'Atomically writes encrypted files'
   build -> prototype 'Builds and publishes the desktop experiment'
+  build -> snapshottrial 'Builds and runs the separate feasibility trial'
+  snapshottrial.session -> snapshotfiles 'Publishes and validates immutable generations'
 }
 
 views {
@@ -52,5 +73,9 @@ views {
   view persistence {
     title 'EXPERIMENTAL — encrypted save and portable backup flow'
     include user, prototype.ui, prototype.importer, prototype.vault, prototype.evidence, localfiles
+  }
+  view snapshot_feasibility {
+    title 'EXPERIMENTAL — authenticated snapshot feasibility, not selected storage'
+    include user, build, snapshottrial.*, snapshotfiles
   }
 }
