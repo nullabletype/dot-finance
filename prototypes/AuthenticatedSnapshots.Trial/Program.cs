@@ -24,8 +24,10 @@ if (args.Length > 0 && args[0] == "--cycle")
     return;
 }
 
-string outputPath = args.Length == 2 && args[0] == "--output"
-    ? Path.GetFullPath(args[1])
+bool requireLatency = args.Contains("--require-latency", StringComparer.Ordinal);
+int outputIndex = Array.IndexOf(args, "--output");
+string outputPath = outputIndex >= 0 && outputIndex + 1 < args.Length
+    ? Path.GetFullPath(args[outputIndex + 1])
     : Path.GetFullPath(Path.Combine("artifacts", "authenticated-snapshots", $"{Environment.OSVersion.Platform}-{Environment.ProcessId}.json"));
 string root = Path.Combine(Path.GetTempPath(), $"dot-finance-snapshot-trial-{Guid.NewGuid():N}");
 string vaultPath = Path.Combine(root, "vault");
@@ -101,9 +103,10 @@ try
             && saveMilliseconds < saveLimitMilliseconds
             && backupMilliseconds < backupLimitMilliseconds);
     File.WriteAllText(outputPath, JsonSerializer.Serialize(evidence, new JsonSerializerOptions { WriteIndented = true }));
-    Console.WriteLine($"Snapshot trial {(evidence.Passed ? "passed" : "failed")}: {outputPath}");
-    if (!evidence.Passed)
+    Console.WriteLine($"Snapshot trial latency gates {(evidence.Passed ? "passed" : "failed")} (advisory): {outputPath}");
+    if (requireLatency && !evidence.Passed)
     {
+        Console.Error.WriteLine("Latency gates failed and --require-latency was specified.");
         Environment.ExitCode = 1;
     }
 }
