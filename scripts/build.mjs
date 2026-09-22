@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 
 const project = 'prototypes/DesktopShell/DesktopShell.csproj';
 const tests = 'prototypes/DesktopShell.Tests/DesktopShell.Tests.csproj';
+const snapshotProject = 'prototypes/AuthenticatedSnapshots/AuthenticatedSnapshots.csproj';
 const snapshotTests = 'prototypes/AuthenticatedSnapshots.Tests/AuthenticatedSnapshots.Tests.csproj';
 // Invalidate a previous success before running any gates.
 rmSync('artifacts/build.json', { force: true });
@@ -29,6 +30,7 @@ run('dotnet', ['build', snapshotTests, '--no-restore', '--configuration', 'Relea
 run('dotnet', ['test', '--project', tests, '--no-build', '--configuration', 'Release']);
 run('dotnet', ['test', '--project', snapshotTests, '--no-build', '--configuration', 'Release']);
 run('dotnet', ['format', tests, '--verify-no-changes', '--no-restore', '--severity', 'info']);
+run('dotnet', ['format', snapshotProject, '--verify-no-changes', '--no-restore', '--severity', 'info']);
 run('dotnet', ['format', snapshotTests, '--verify-no-changes', '--no-restore', '--severity', 'info']);
 run('dotnet', ['run', '--project', 'prototypes/AuthenticatedSnapshots.Trial/AuthenticatedSnapshots.Trial.csproj', '--configuration', 'Release', '--', '--output', 'artifacts/authenticated-snapshots/local.json']);
 rmSync('artifacts/desktop', { recursive: true, force: true });
