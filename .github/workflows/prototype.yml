@@ -32,6 +32,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y xvfb libice6 libsm6 libfontconfig1 libx11-6 libxext6 libxrender1 strace
       - run: npm run build
       - run: npm run persistence:smoke
+      - run: npm run snapshots:fault-smoke
       - name: Persistence with networking blocked and traced (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -40,6 +41,16 @@ jobs:
           sudo chmod -R a+rX artifacts/offline-network
           if grep -E 'socket\(|connect\(|sendto\(' artifacts/offline-network/network.trace; then
             echo 'Unexpected network syscall from persistence scenario'
+            exit 1
+          fi
+      - name: Authenticated snapshots with networking blocked and traced (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p artifacts/offline-network artifacts/authenticated-snapshots
+          sudo env DOTNET_EnableDiagnostics=0 unshare --net strace -f -e trace=network -o artifacts/offline-network/snapshots.trace dotnet prototypes/AuthenticatedSnapshots.Trial/bin/Release/net10.0/AuthenticatedSnapshots.Trial.dll --output artifacts/authenticated-snapshots/offline.json
+          sudo chmod -R a+rX artifacts/authenticated-snapshots artifacts/offline-network
+          if grep -E 'socket\(|connect\(|sendto\(' artifacts/offline-network/snapshots.trace; then
+            echo 'Unexpected network syscall from authenticated snapshots scenario'
             exit 1
           fi
       - name: Native launch (Linux virtual display)
