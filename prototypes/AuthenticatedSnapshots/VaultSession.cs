@@ -19,6 +19,7 @@ public sealed class VaultSession : IDisposable
     private const int TagLength = 16;
     private const int HeaderLength = 72;
     private const long MaximumPlaintextLength = 512L * 1024 * 1024;
+    private const int SupportedSchemaVersion = 1;
     private static ReadOnlySpan<byte> Magic => "DFSNAP01"u8;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.General);
     private readonly string _directory;
@@ -125,10 +126,9 @@ public sealed class VaultSession : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentException.ThrowIfNullOrWhiteSpace(query);
-        return _searchIndex
+        return [.. _searchIndex
             .Where(entry => entry.SearchText.Contains(query, StringComparison.OrdinalIgnoreCase))
-            .Select(entry => entry.Transaction)
-            .ToArray();
+            .Select(entry => entry.Transaction)];
     }
 
     public void Save(SnapshotDocument document)
@@ -226,12 +226,9 @@ public sealed class VaultSession : IDisposable
         if (File.Exists(backupPath))
         {
             ParsedSnapshot existing = ReadAndAuthenticate(backupPath, _key);
-            if (existing.VaultId == _vaultId && existing.Generation == _generation)
-            {
-                return new SnapshotBackupReceipt(_vaultId, _generation);
-            }
-
-            throw new IOException("The backup path already contains a different authenticated generation.");
+            return existing.VaultId == _vaultId && existing.Generation == _generation
+                ? new SnapshotBackupReceipt(_vaultId, _generation)
+                : throw new IOException("The backup path already contains a different authenticated generation.");
         }
 
         string temporaryPath = backupPath + $".{Guid.NewGuid():N}.partial";
@@ -316,6 +313,14 @@ public sealed class VaultSession : IDisposable
         if (password.IsEmpty || password.IsWhiteSpace())
         {
             throw new ArgumentException("A non-empty vault password is required.", nameof(password));
+        }
+    }
+
+    private static void ValidateSchemaVersion(SnapshotDocument document)
+    {
+        if (document.SchemaVersion != SupportedSchemaVersion)
+        {
+            throw new InvalidDataException("The authenticated snapshot uses an unsupported schema version.");
         }
     }
 
@@ -439,15 +444,12 @@ public sealed class VaultSession : IDisposable
         string name = File.ReadAllText(Path.Combine(directory, "active-generation")).Trim();
         const string prefix = "generation-";
         const string suffix = ".dfsnap";
-        if (!name.StartsWith(prefix, StringComparison.Ordinal)
+        return !name.StartsWith(prefix, StringComparison.Ordinal)
             || !name.EndsWith(suffix, StringComparison.Ordinal)
             || !uint.TryParse(name.AsSpan(prefix.Length, name.Length - prefix.Length - suffix.Length), out uint generation)
-            || !string.Equals(name, $"generation-{generation:D10}.dfsnap", StringComparison.Ordinal))
-        {
-            throw new InvalidDataException("The active generation pointer is invalid.");
-        }
-
-        return Path.Combine(directory, name);
+            || !string.Equals(name, $"generation-{generation:D10}.dfsnap", StringComparison.Ordinal)
+            ? throw new InvalidDataException("The active generation pointer is invalid.")
+            : Path.Combine(directory, name);
     }
 
     private static void PublishActiveGeneration(string directory, uint generation)
@@ -491,12 +493,9 @@ public sealed class VaultSession : IDisposable
         uint generation = BinaryPrimitives.ReadUInt32BigEndian(header.AsSpan(48));
         byte[] nonce = header.AsSpan(52, NonceLength).ToArray();
         ulong ciphertextLength = BinaryPrimitives.ReadUInt64BigEndian(header.AsSpan(64));
-        if (ciphertextLength > MaximumPlaintextLength || checked((ulong)stream.Length) != (ulong)HeaderLength + ciphertextLength + TagLength)
-        {
-            throw new InvalidDataException("The snapshot length is invalid.");
-        }
-
-        return new ParsedSnapshot(path, header, salt, vaultId, generation, nonce, checked((int)ciphertextLength), null);
+        return ciphertextLength > MaximumPlaintextLength || checked((ulong)stream.Length) != (ulong)HeaderLength + ciphertextLength + TagLength
+            ? throw new InvalidDataException("The snapshot length is invalid.")
+            : new ParsedSnapshot(path, header, salt, vaultId, generation, nonce, checked((int)ciphertextLength), null);
     }
 
     private static ParsedSnapshot ReadAndAuthenticate(string path, byte[] key)
@@ -518,6 +517,7 @@ public sealed class VaultSession : IDisposable
 
             SnapshotDocument document = JsonSerializer.Deserialize<SnapshotDocument>(plaintext, JsonOptions)
                 ?? throw new InvalidDataException("The authenticated snapshot payload is invalid.");
+            ValidateSchemaVersion(document);
             return parsed with { Document = document };
         }
         catch (CryptographicException exception)
@@ -530,7 +530,7 @@ public sealed class VaultSession : IDisposable
         }
     }
 
-    private static IReadOnlyList<IndexedTransaction> BuildSearchIndex(IReadOnlyList<SnapshotTransaction> transactions) => transactions
+    private static IReadOnlyList<IndexedTransaction> BuildSearchIndex(IReadOnlyList<SnapshotTransaction> transactions) => [.. transactions
         .Select(transaction => new IndexedTransaction(transaction, string.Join('\u001F',
             transaction.Id,
             transaction.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
@@ -544,8 +544,7 @@ public sealed class VaultSession : IDisposable
             transaction.Merchant,
             transaction.Notes,
             transaction.ReconciliationId,
-            transaction.SettlementStatus)))
-        .ToArray();
+            transaction.SettlementStatus)))];
 
     private sealed record ParsedSnapshot(
         string Path,
