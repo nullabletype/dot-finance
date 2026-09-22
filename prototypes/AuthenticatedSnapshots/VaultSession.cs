@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -172,6 +173,7 @@ public sealed class VaultSession : IDisposable
             }
 
             Publish(nextGeneration, header, ciphertext, tag);
+            CrashIfRequested("save-before-pointer"); // Disposable fault-injection hook; no-op unless DFSNAP_CRASH_POINT is set.
             PublishActiveGeneration(_directory, nextGeneration);
             _generation = nextGeneration;
             _document = document;
@@ -210,6 +212,7 @@ public sealed class VaultSession : IDisposable
             }
 
             Publish(nextGeneration, header, ciphertext, tag, newKey);
+            CrashIfRequested("password-change-before-pointer"); // Disposable fault-injection hook; no-op unless DFSNAP_CRASH_POINT is set.
             PublishActiveGeneration(_directory, nextGeneration);
             byte[] oldKey = _key;
             _key = newKey;
@@ -253,6 +256,7 @@ public sealed class VaultSession : IDisposable
                 throw new InvalidDataException("The staged backup is not the current vault generation.");
             }
 
+            CrashIfRequested("backup-before-rename"); // Disposable fault-injection hook; no-op unless DFSNAP_CRASH_POINT is set.
             File.Move(temporaryPath, backupPath);
             return new SnapshotBackupReceipt(_vaultId, _generation);
         }
@@ -364,6 +368,7 @@ public sealed class VaultSession : IDisposable
             {
                 CopyAndFlush(backupPath, temporaryPath);
                 _ = ReadAndAuthenticate(temporaryPath, key);
+                CrashIfRequested("restore-before-rename"); // Disposable fault-injection hook; no-op unless DFSNAP_CRASH_POINT is set.
                 File.Move(temporaryPath, targetPath);
                 PublishActiveGeneration(directory, backup.Generation);
             }
@@ -502,6 +507,7 @@ public sealed class VaultSession : IDisposable
             }
 
             _ = ReadAndAuthenticate(temporaryPath, key ?? _key);
+            CrashIfRequested("save-before-rename"); // Disposable fault-injection hook; no-op unless DFSNAP_CRASH_POINT is set.
             File.Move(temporaryPath, finalPath);
         }
         finally
@@ -561,6 +567,21 @@ public sealed class VaultSession : IDisposable
         finally
         {
             File.Delete(temporaryPath);
+        }
+    }
+
+    // Disposable fault-injection hook for the abrupt-interruption recovery matrix. It is
+    // a no-op unless DFSNAP_CRASH_POINT and DFSNAP_CRASH_MARKER are both set; production
+    // code never sets these variables.
+    private static void CrashIfRequested(string point)
+    {
+        if (string.Equals(Environment.GetEnvironmentVariable("DFSNAP_CRASH_POINT"), point, StringComparison.Ordinal))
+        {
+            string markerPath = Environment.GetEnvironmentVariable("DFSNAP_CRASH_MARKER")
+                ?? throw new InvalidOperationException("DFSNAP_CRASH_MARKER is required when injecting an abrupt interruption.");
+            File.WriteAllText(markerPath, point);
+            Process.GetCurrentProcess().Kill();
+            Thread.Sleep(Timeout.Infinite);
         }
     }
 
