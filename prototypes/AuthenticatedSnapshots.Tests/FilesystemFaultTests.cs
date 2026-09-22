@@ -235,6 +235,28 @@ public sealed class FilesystemFaultTests : IDisposable
         Assert.Equivalent(first, reopened.Load(), strict: true);
     }
 
+    [Fact]
+    public void A_stray_malformed_higher_generation_file_does_not_collide_with_the_next_save()
+    {
+        const string password = "synthetic test password";
+        using (VaultSession vault = VaultSession.Create(_directory, password))
+        {
+            vault.Save(SyntheticDocument());
+        }
+
+        // A stray generation file with a higher number and unreadable content (e.g. a
+        // foreign or corrupted file) must not collide with, nor break, the next save.
+        File.WriteAllText(Path.Combine(_directory, "generation-0000000042.dfsnap"), "not a valid generation");
+
+        using (VaultSession vault = VaultSession.Unlock(_directory, password))
+        {
+            vault.Save(SyntheticDocument("SYNTH-0002"));
+        }
+
+        using VaultSession reopened = VaultSession.Unlock(_directory, password);
+        Assert.Equivalent(SyntheticDocument("SYNTH-0002"), reopened.Load(), strict: true);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_directory))

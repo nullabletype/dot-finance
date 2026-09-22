@@ -488,11 +488,24 @@ public sealed class VaultSession : IDisposable
 
     private byte[] UniqueNonce()
     {
-        HashSet<string> used = Directory.GetFiles(_directory, "generation-*.dfsnap")
-            .Select(ReadHeader)
-            .Where(snapshot => snapshot.VaultId == _vaultId)
-            .Select(snapshot => Convert.ToHexString(snapshot.Nonce))
-            .ToHashSet(StringComparer.Ordinal);
+        HashSet<string> used = new(StringComparer.Ordinal);
+        foreach (string path in Directory.GetFiles(_directory, "generation-*.dfsnap"))
+        {
+            try
+            {
+                ParsedSnapshot snapshot = ReadHeader(path);
+                if (snapshot.VaultId == _vaultId)
+                {
+                    used.Add(Convert.ToHexString(snapshot.Nonce));
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
+            {
+                // Ignore unreadable generation files; they are not valid generations and
+                // cannot contribute a duplicate nonce.
+            }
+        }
+
         for (int attempt = 0; attempt < 8; attempt++)
         {
             byte[] nonce = RandomNumberGenerator.GetBytes(NonceLength);
@@ -551,10 +564,15 @@ public sealed class VaultSession : IDisposable
         uint highest = _generation;
         foreach (string path in Directory.GetFiles(_directory, "generation-*.dfsnap"))
         {
-            ParsedSnapshot snapshot = ReadHeader(path);
-            if (snapshot.VaultId == _vaultId)
+            string name = Path.GetFileName(path);
+            const string prefix = "generation-";
+            const string suffix = ".dfsnap";
+            if (name.Length == prefix.Length + 10 + suffix.Length
+                && name.StartsWith(prefix, StringComparison.Ordinal)
+                && name.EndsWith(suffix, StringComparison.Ordinal)
+                && uint.TryParse(name.AsSpan(prefix.Length, 10), out uint generation))
             {
-                highest = Math.Max(highest, snapshot.Generation);
+                highest = Math.Max(highest, generation);
             }
         }
 
