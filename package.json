@@ -7,6 +7,7 @@
     "start": "dotnet run --project prototypes/DesktopShell/DesktopShell.csproj",
     "smoke": "node scripts/smoke.mjs",
     "persistence:smoke": "node scripts/persistence-smoke.mjs",
+    "snapshots:fault-smoke": "node scripts/snapshots-fault-smoke.mjs",
     "snapshots:trial": "dotnet run --project prototypes/AuthenticatedSnapshots.Trial/AuthenticatedSnapshots.Trial.csproj --configuration Release -- --output artifacts/authenticated-snapshots/local.json",
     "architecture:format": "likec4 format docs/architecture",
     "architecture:check": "likec4 format --check docs/architecture && likec4 validate docs/architecture",

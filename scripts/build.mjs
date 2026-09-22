@@ -6,6 +6,7 @@ const project = 'prototypes/DesktopShell/DesktopShell.csproj';
 const tests = 'prototypes/DesktopShell.Tests/DesktopShell.Tests.csproj';
 const snapshotProject = 'prototypes/AuthenticatedSnapshots/AuthenticatedSnapshots.csproj';
 const snapshotTests = 'prototypes/AuthenticatedSnapshots.Tests/AuthenticatedSnapshots.Tests.csproj';
+const snapshotTrial = 'prototypes/AuthenticatedSnapshots.Trial/AuthenticatedSnapshots.Trial.csproj';
 // Invalidate a previous success before running any gates.
 rmSync('artifacts/build.json', { force: true });
 const commit = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' });
@@ -24,6 +25,7 @@ run(process.execPath, ['scripts/check-invalid-model.mjs']);
 run(process.execPath, [cli, 'build', 'docs/architecture', '-o', 'artifacts/architecture', '--base', './']);
 run('dotnet', ['restore', tests, '--locked-mode']);
 run('dotnet', ['restore', snapshotTests, '--locked-mode']);
+run('dotnet', ['restore', snapshotTrial, '--locked-mode']);
 run('dotnet', ['build', project, '--no-restore', '--configuration', 'Release', '--warnaserror']);
 run('dotnet', ['build', tests, '--no-restore', '--configuration', 'Release', '--warnaserror']);
 run('dotnet', ['build', snapshotTests, '--no-restore', '--configuration', 'Release', '--warnaserror']);
@@ -32,7 +34,8 @@ run('dotnet', ['test', '--project', snapshotTests, '--no-build', '--configuratio
 run('dotnet', ['format', tests, '--verify-no-changes', '--no-restore', '--severity', 'info']);
 run('dotnet', ['format', snapshotProject, '--verify-no-changes', '--no-restore', '--severity', 'info']);
 run('dotnet', ['format', snapshotTests, '--verify-no-changes', '--no-restore', '--severity', 'info']);
-run('dotnet', ['run', '--project', 'prototypes/AuthenticatedSnapshots.Trial/AuthenticatedSnapshots.Trial.csproj', '--configuration', 'Release', '--', '--output', 'artifacts/authenticated-snapshots/local.json']);
+run('dotnet', ['format', snapshotTrial, '--verify-no-changes', '--no-restore', '--severity', 'info']);
+run('dotnet', ['run', '--project', snapshotTrial, '--configuration', 'Release', '--', '--output', 'artifacts/authenticated-snapshots/local.json']);
 rmSync('artifacts/desktop', { recursive: true, force: true });
 run('dotnet', ['publish', project, '--no-build', '--configuration', 'Release', '--output', 'artifacts/desktop']);
 const endCommit = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' });

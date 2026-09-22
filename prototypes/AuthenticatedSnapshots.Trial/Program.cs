@@ -1,14 +1,21 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Text.Json;
 
 using AuthenticatedSnapshots;
 
-const int TransactionCount = 100_000;
-const double SearchLimitMilliseconds = 1_000;
-const double UnlockLimitMilliseconds = 3_000;
-const double SaveLimitMilliseconds = 3_000;
-const double BackupLimitMilliseconds = 15_000;
-const string Password = "fictional benchmark password — not user data";
+const int transactionCount = 100_000;
+const double searchLimitMilliseconds = 1_000;
+const double unlockLimitMilliseconds = 3_000;
+const double saveLimitMilliseconds = 3_000;
+const double backupLimitMilliseconds = 15_000;
+const string password = "fictional benchmark password — not user data";
+
+if (args.Length > 0 && args[0] == "--fault")
+{
+    Environment.ExitCode = RunFaultCommand(args[1..]);
+    return;
+}
 
 string outputPath = args.Length == 2 && args[0] == "--output"
     ? Path.GetFullPath(args[1])
@@ -23,7 +30,7 @@ try
     SnapshotDocument document = GenerateDocument();
     long memoryBefore = GC.GetTotalMemory(forceFullCollection: true);
     double saveMilliseconds;
-    using (VaultSession vault = VaultSession.Create(vaultPath, Password))
+    using (VaultSession vault = VaultSession.Create(vaultPath, password))
     {
         saveMilliseconds = Measure(() => vault.Save(document));
     }
@@ -31,7 +38,7 @@ try
     double unlockMilliseconds;
     double backupMilliseconds;
     Dictionary<string, double> searchP95 = new(StringComparer.Ordinal);
-    using (VaultSession vault = MeasureResult(() => VaultSession.Unlock(vaultPath, Password), out unlockMilliseconds))
+    using (VaultSession vault = MeasureResult(() => VaultSession.Unlock(vaultPath, password), out unlockMilliseconds))
     {
         string[] searches =
         [
@@ -68,7 +75,7 @@ try
         Environment.OSVersion.ToString(),
         System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString(),
         Environment.Version.ToString(),
-        TransactionCount,
+        transactionCount,
         saveMilliseconds,
         unlockMilliseconds,
         backupMilliseconds,
@@ -76,10 +83,10 @@ try
         memoryAfter - memoryBefore,
         vaultBytes,
         backupBytes,
-        searchP95.Values.All(value => value < SearchLimitMilliseconds)
-            && unlockMilliseconds < UnlockLimitMilliseconds
-            && saveMilliseconds < SaveLimitMilliseconds
-            && backupMilliseconds < BackupLimitMilliseconds);
+        searchP95.Values.All(value => value < searchLimitMilliseconds)
+            && unlockMilliseconds < unlockLimitMilliseconds
+            && saveMilliseconds < saveLimitMilliseconds
+            && backupMilliseconds < backupLimitMilliseconds);
     File.WriteAllText(outputPath, JsonSerializer.Serialize(evidence, new JsonSerializerOptions { WriteIndented = true }));
     Console.WriteLine($"Snapshot trial {(evidence.Passed ? "passed" : "failed")}: {outputPath}");
     if (!evidence.Passed)
@@ -94,7 +101,7 @@ finally
 
 static SnapshotDocument GenerateDocument()
 {
-    SnapshotTransaction[] transactions = new SnapshotTransaction[TransactionCount];
+    SnapshotTransaction[] transactions = new SnapshotTransaction[transactionCount];
     DateOnly start = new(2006, 1, 1);
     for (int index = 0; index < transactions.Length; index++)
     {
@@ -121,15 +128,17 @@ static SnapshotDocument GenerateDocument()
             needle ? "Completed" : index % 2 == 0 ? "Settled" : "Unsettled");
     }
 
-    ReconciliationRecord[] reconciliations = Enumerable.Range(0, 200)
-        .Select(index => new ReconciliationRecord(
-            $"REC-{index:D4}",
-            new DateTimeOffset(2006, 1, 1, 12, 0, 0, TimeSpan.Zero).AddDays(index * 36),
-            "Completed",
-            1200m + index,
-            new Dictionary<string, decimal> { ["Joint"] = 450m, ["Shared Savings"] = 250m },
-            ["Joint transferred", "Card paid"]))
-        .ToArray();
+    ReconciliationRecord[] reconciliations =
+    [
+        .. Enumerable.Range(0, 200)
+            .Select(index => new ReconciliationRecord(
+                $"REC-{index:D4}",
+                new DateTimeOffset(2006, 1, 1, 12, 0, 0, TimeSpan.Zero).AddDays(index * 36),
+                "Completed",
+                1200m + index,
+                new Dictionary<string, decimal> { ["Joint"] = 450m, ["Shared Savings"] = 250m },
+                ["Joint transferred", "Card paid"]))
+    ];
     return new SnapshotDocument(
         1,
         DateTimeOffset.UtcNow,
@@ -152,6 +161,141 @@ static T MeasureResult<T>(Func<T> action, out double milliseconds)
     milliseconds = stopwatch.Elapsed.TotalMilliseconds;
     return result;
 }
+
+// Deterministic synthetic constants for the abrupt-interruption fault matrix. These are
+// shared with scripts/snapshots-fault-smoke.mjs and never contain user data.
+const string faultPassword = "synthetic fault-injection password";
+const string faultNewPassword = "synthetic new password";
+
+static int RunFaultCommand(string[] args)
+{
+    if (args.Length == 0)
+    {
+        Console.Error.WriteLine("Usage: --fault <init|save|backup|restore|password-change|verify> ...");
+        return 2;
+    }
+
+    switch (args[0])
+    {
+        case "init" when args.Length == 2:
+            return FaultInit(args[1]);
+        case "save" when args.Length == 2:
+            return FaultSave(args[1]);
+        case "backup" when args.Length == 3:
+            return FaultBackup(args[1], args[2]);
+        case "restore" when args.Length == 3:
+            return FaultRestore(args[1], args[2]);
+        case "password-change" when args.Length == 2:
+            return FaultPasswordChange(args[1]);
+        case "verify" when args.Length == 3:
+            return FaultVerify(args[1], args[2]);
+        default:
+            Console.Error.WriteLine($"Unknown fault subcommand or argument count: {string.Join(' ', args)}");
+            return 2;
+    }
+}
+
+static int FaultInit(string vaultDirectory)
+{
+    using VaultSession vault = VaultSession.Create(vaultDirectory, faultPassword);
+    vault.Save(FaultDocument());
+    return 0;
+}
+
+static int FaultSave(string vaultDirectory)
+{
+    using VaultSession vault = VaultSession.Unlock(vaultDirectory, faultPassword);
+    vault.Save(FaultDocument());
+    return 0;
+}
+
+static int FaultBackup(string vaultDirectory, string backupPath)
+{
+    using VaultSession vault = VaultSession.Unlock(vaultDirectory, faultPassword);
+    vault.CreateBackup(backupPath);
+    return 0;
+}
+
+static int FaultRestore(string backupPath, string vaultDirectory)
+{
+    VaultSession.Restore(backupPath, vaultDirectory, faultPassword);
+    return 0;
+}
+
+static int FaultPasswordChange(string vaultDirectory)
+{
+    using VaultSession vault = VaultSession.Unlock(vaultDirectory, faultPassword);
+    vault.ChangePassword(faultNewPassword);
+    return 0;
+}
+
+static int FaultVerify(string vaultDirectory, string password)
+{
+    using VaultSession vault = VaultSession.Unlock(vaultDirectory, password);
+    SnapshotDocument document = vault.Load();
+    SnapshotTransaction first = document.Transactions[0];
+    FaultVerifyReceipt receipt = new(
+        document.Transactions.Count,
+        document.Reconciliations.Count,
+        first.Id,
+        first.Amount,
+        first.Account,
+        document.Configuration["theme"],
+        FaultDocumentChecksum(document));
+    Console.WriteLine(JsonSerializer.Serialize(receipt));
+    return 0;
+}
+
+static string FaultDocumentChecksum(SnapshotDocument document)
+{
+    byte[] json = JsonSerializer.SerializeToUtf8Bytes(document, new JsonSerializerOptions(JsonSerializerDefaults.General));
+    return Convert.ToHexString(SHA256.HashData(json));
+}
+
+static SnapshotDocument FaultDocument() => new(
+    1,
+    new DateTimeOffset(2026, 9, 21, 12, 0, 0, TimeSpan.Zero),
+    [
+        new SnapshotTransaction(
+            "FAULT-0001",
+            new DateOnly(2026, 9, 20),
+            42.50m,
+            "Fictional Card",
+            "Example Bank",
+            "GBP",
+            "Groceries",
+            "Food",
+            "Purchase",
+            string.Empty,
+            "Example Market",
+            string.Empty,
+            "Example Market",
+            "Synthetic details",
+            "Synthetic note",
+            string.Empty,
+            "Joint",
+            "REC-001",
+            "Unsettled")
+    ],
+    new Dictionary<string, string> { ["theme"] = "System" },
+    [
+        new ReconciliationRecord(
+            "REC-001",
+            new DateTimeOffset(2026, 9, 21, 12, 0, 0, TimeSpan.Zero),
+            "Draft",
+            1200m,
+            new Dictionary<string, decimal> { ["Joint"] = 450m },
+            [])
+    ]);
+
+internal sealed record FaultVerifyReceipt(
+    int Transactions,
+    int Reconciliations,
+    string FirstTransactionId,
+    decimal FirstTransactionAmount,
+    string FirstTransactionAccount,
+    string ConfigurationTheme,
+    string DocumentChecksum);
 
 internal sealed record TrialEvidence(
     DateTimeOffset RecordedAt,
