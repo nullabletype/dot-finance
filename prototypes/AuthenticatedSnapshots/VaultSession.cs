@@ -217,7 +217,7 @@ public sealed class VaultSession : IDisposable
                 aes.Encrypt(nonce, plaintext, ciphertext, tag, header);
             }
 
-            Publish(nextGeneration, header, ciphertext, tag, newKey);
+            Publish(nextGeneration, header, ciphertext, tag);
             CrashIfRequested("password-change-before-pointer"); // Disposable fault-injection hook; no-op unless DFSNAP_CRASH_POINT is set.
             PublishActiveGeneration(_directory, nextGeneration);
             byte[] oldKey = _key;
@@ -523,7 +523,7 @@ public sealed class VaultSession : IDisposable
         throw new CryptographicException("Could not allocate a unique snapshot nonce.");
     }
 
-    private void Publish(uint generation, byte[] header, byte[] ciphertext, byte[] tag, byte[]? key = null)
+    private void Publish(uint generation, byte[] header, byte[] ciphertext, byte[] tag)
     {
         string finalPath = GenerationPath(generation);
         string temporaryPath = Path.Combine(_directory, $".{Guid.NewGuid():N}.partial");
@@ -538,7 +538,7 @@ public sealed class VaultSession : IDisposable
                 stream.Flush(flushToDisk: true);
             });
 
-            TimeSavePhase("save-validate", () => _ = ReadAndAuthenticate(temporaryPath, key ?? _key));
+            TimeSavePhase("save-validate", () => VerifyWrittenFile(temporaryPath, header, ciphertext, tag));
             CrashIfRequested("save-before-rename"); // Disposable fault-injection hook; no-op unless DFSNAP_CRASH_POINT is set.
             TimeSavePhase("save-rename", () => File.Move(temporaryPath, finalPath));
         }
@@ -680,6 +680,33 @@ public sealed class VaultSession : IDisposable
         finally
         {
             SavePhaseTiming(name, stopwatch.Elapsed.TotalMilliseconds);
+        }
+    }
+
+    private static void VerifyWrittenFile(string path, byte[] header, byte[] ciphertext, byte[] tag)
+    {
+        long expectedLength = (long)header.Length + ciphertext.Length + tag.Length;
+        using FileStream stream = File.OpenRead(path);
+        if (stream.Length != expectedLength)
+        {
+            throw new InvalidDataException("The written snapshot is incomplete.");
+        }
+
+        byte[] buffer = new byte[64 * 1024];
+        foreach (byte[] part in new[] { header, ciphertext, tag })
+        {
+            int offset = 0;
+            while (offset < part.Length)
+            {
+                int count = Math.Min(buffer.Length, part.Length - offset);
+                int read = stream.Read(buffer, 0, count);
+                if (read != count || !buffer.AsSpan(0, read).SequenceEqual(part.AsSpan(offset, read)))
+                {
+                    throw new InvalidDataException("The written snapshot does not match the intended generation.");
+                }
+
+                offset += read;
+            }
         }
     }
 
