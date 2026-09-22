@@ -253,6 +253,10 @@ public sealed class FilesystemFaultTests : IDisposable
             vault.Save(SyntheticDocument("SYNTH-0002"));
         }
 
+        // The next save must skip past the stray generation-42 file, not reuse generation 2.
+        Assert.True(File.Exists(Path.Combine(_directory, "generation-0000000043.dfsnap")));
+        Assert.False(File.Exists(Path.Combine(_directory, "generation-0000000002.dfsnap")));
+
         using VaultSession reopened = VaultSession.Unlock(_directory, password);
         Assert.Equivalent(SyntheticDocument("SYNTH-0002"), reopened.Load(), strict: true);
     }
