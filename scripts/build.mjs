@@ -36,6 +36,7 @@ run('dotnet', ['format', snapshotProject, '--verify-no-changes', '--no-restore',
 run('dotnet', ['format', snapshotTests, '--verify-no-changes', '--no-restore', '--severity', 'info']);
 run('dotnet', ['format', snapshotTrial, '--verify-no-changes', '--no-restore', '--severity', 'info']);
 run('dotnet', ['run', '--project', snapshotTrial, '--configuration', 'Release', '--', '--output', 'artifacts/authenticated-snapshots/local.json']);
+run('dotnet', ['publish', snapshotTrial, '--no-build', '--configuration', 'Release', '--output', 'artifacts/snapshot-trial']);
 rmSync('artifacts/desktop', { recursive: true, force: true });
 run('dotnet', ['publish', project, '--no-build', '--configuration', 'Release', '--output', 'artifacts/desktop']);
 const endCommit = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' });
