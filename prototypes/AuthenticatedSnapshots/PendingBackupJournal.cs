@@ -4,6 +4,10 @@ namespace AuthenticatedSnapshots;
 
 public sealed record PendingBackupEntry(Guid VaultId, uint Generation, string TargetPath);
 
+// A corrupt or unreadable pending-backups journal is preserved (not deleted) so it can
+// be inspected, and Read throws for such a journal so that queueing fails loudly instead
+// of silently discarding pending backups. Only a missing or empty journal is treated as
+// empty.
 public static class PendingBackupJournal
 {
     public const string FileName = "pending-backups.json";
@@ -18,21 +22,10 @@ public static class PendingBackupJournal
             return [];
         }
 
-        try
-        {
-            byte[] json = File.ReadAllBytes(path);
-            return json.Length == 0
-                ? []
-                : JsonSerializer.Deserialize<List<PendingBackupEntry>>(json, JsonOptions) ?? [];
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
-        {
-            // A corrupt or unparseable journal is treated as empty so that it never
-            // blocks the vault from opening. The damaged file is deliberately left in
-            // place (not deleted) for later inspection; the next successful write
-            // atomically replaces it.
-            return [];
-        }
+        byte[] json = File.ReadAllBytes(path);
+        return json.Length == 0
+            ? []
+            : JsonSerializer.Deserialize<List<PendingBackupEntry>>(json, JsonOptions) ?? [];
     }
 
     public static void Write(string directory, IReadOnlyList<PendingBackupEntry> entries)

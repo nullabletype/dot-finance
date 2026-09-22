@@ -1,5 +1,7 @@
 namespace AuthenticatedSnapshots.Tests;
 
+using System.Text.Json;
+
 public sealed class AutomaticBackupJournalTests : IDisposable
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), $"dot-finance-auto-backup-{Guid.NewGuid():N}");
@@ -131,6 +133,67 @@ public sealed class AutomaticBackupJournalTests : IDisposable
             () => vault.QueueAutomaticBackup(Path.Combine(Path.GetTempPath(), "unused.dfsnap")));
 
         Assert.Contains("Save", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Corrupt_journal_fails_queueing_loudly_and_publish_returns_empty_and_the_vault_still_opens()
+    {
+        const string password = "synthetic test password";
+        using (VaultSession vault = VaultSession.Create(_directory, password))
+        {
+            vault.Save(SyntheticDocument());
+        }
+
+        string journalPath = Path.Combine(_directory, PendingBackupJournal.FileName);
+        File.WriteAllText(journalPath, "{ not valid json");
+        byte[] corrupt = File.ReadAllBytes(journalPath);
+
+        using (VaultSession vault = VaultSession.Unlock(_directory, password))
+        {
+            // Queueing fails loudly on a corrupt journal instead of silently discarding it.
+            Assert.Throws<JsonException>(() => vault.QueueAutomaticBackup(Path.Combine(Path.GetTempPath(), $"dot-finance-corrupt-{Guid.NewGuid():N}.dfsnap")));
+
+            // Publication returns empty and leaves the corrupt journal byte-for-byte unchanged.
+            Assert.Empty(vault.PublishPendingBackups());
+            Assert.Equal(corrupt, File.ReadAllBytes(journalPath));
+            Assert.NotEmpty(vault.Load().Transactions);
+        }
+
+        // The vault still opens.
+        using VaultSession reopened = VaultSession.Unlock(_directory, password);
+        Assert.NotEmpty(reopened.Load().Transactions);
+    }
+
+    [Fact]
+    public void Password_change_with_a_pending_backup_throws_and_does_not_change_the_password()
+    {
+        const string password = "synthetic test password";
+        string backupPath = Path.Combine(Path.GetTempPath(), $"dot-finance-pending-password-{Guid.NewGuid():N}.dfsnap");
+        try
+        {
+            SnapshotDocument expected = SyntheticDocument();
+            using (VaultSession vault = VaultSession.Create(_directory, password))
+            {
+                vault.Save(expected);
+                vault.QueueAutomaticBackup(backupPath);
+
+                InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                    () => vault.ChangePassword("synthetic new password"));
+
+                Assert.Contains("Publish pending", exception.Message, StringComparison.Ordinal);
+            }
+
+            using (VaultSession reopened = VaultSession.Unlock(_directory, password))
+            {
+                Assert.Equivalent(expected, reopened.Load(), strict: true);
+            }
+
+            Assert.Throws<VaultAuthenticationException>(() => VaultSession.Unlock(_directory, "synthetic new password"));
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
     }
 
     public void Dispose()

@@ -5,6 +5,33 @@ public sealed class FilesystemFaultTests : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), $"dot-finance-filesystem-fault-{Guid.NewGuid():N}");
 
     [Fact]
+    public void A_subsequent_save_succeeds_after_a_save_orphans_a_generation_before_the_pointer_update()
+    {
+        const string password = "synthetic test password";
+        SnapshotDocument first = SyntheticDocument();
+        using (VaultSession vault = VaultSession.Create(_directory, password))
+        {
+            vault.Save(first);
+            vault.Save(SyntheticDocument("SYNTH-0002"));
+        }
+
+        // Simulate interruption after publishing generation-2 but before updating the
+        // active pointer: the pointer is rolled back to generation-1 while generation-2
+        // remains on disk as a complete orphan.
+        File.WriteAllText(Path.Combine(_directory, "active-generation"), "generation-0000000001.dfsnap\n");
+
+        SnapshotDocument third = SyntheticDocument("SYNTH-0003");
+        using (VaultSession vault = VaultSession.Unlock(_directory, password))
+        {
+            Assert.Equivalent(first, vault.Load(), strict: true);
+            vault.Save(third);
+        }
+
+        using VaultSession reopened = VaultSession.Unlock(_directory, password);
+        Assert.Equivalent(third, reopened.Load(), strict: true);
+    }
+
+    [Fact]
     public void Stale_partial_files_are_ignored_and_never_selected_as_the_active_generation()
     {
         const string password = "synthetic test password";

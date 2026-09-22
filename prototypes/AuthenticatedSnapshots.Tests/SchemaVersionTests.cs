@@ -63,6 +63,41 @@ public sealed class SchemaVersionTests : IDisposable
         Assert.Contains("schema", exception.InnerException.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    [InlineData(int.MaxValue)]
+    public void Save_rejects_an_unsupported_schema_version(int schemaVersion)
+    {
+        using VaultSession vault = VaultSession.Create(_directory, Password);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => vault.Save(SyntheticDocument() with { SchemaVersion = schemaVersion }));
+
+        Assert.Contains("schema", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Null_transactions_collection_is_rejected_as_a_controlled_authentication_failure()
+    {
+        CreateSavedVault();
+        byte[] plaintext = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            SchemaVersion = 1,
+            SavedAt = new DateTimeOffset(2026, 9, 21, 12, 0, 0, TimeSpan.Zero),
+            Transactions = (SnapshotTransaction[]?)null,
+            Configuration = new Dictionary<string, string>(),
+            Reconciliations = Array.Empty<ReconciliationRecord>(),
+        }, JsonOptions);
+        RewriteGeneration(plaintext);
+
+        VaultAuthenticationException exception = Assert.Throws<VaultAuthenticationException>(
+            () => VaultSession.Unlock(_directory, Password));
+
+        Assert.IsType<InvalidDataException>(exception.InnerException);
+        Assert.Contains("payload", exception.InnerException.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_directory))

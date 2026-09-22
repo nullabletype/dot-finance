@@ -18,10 +18,21 @@ mkdirSync(root, { recursive: true });
 
 build();
 
-for (const point of ['save-before-rename', 'save-before-pointer']) {
-  const vault = join(root, `save-${point}`);
+{
+  const vault = join(root, 'save-save-before-rename');
   initVault(vault);
-  interrupt(`save-${point}`, point, ['save', vault]);
+  interrupt('save-before-rename', 'save-before-rename', ['save', vault]);
+  verify(vault, password);
+  assertNoPartialIsActive(vault);
+}
+
+{
+  const vault = join(root, 'save-save-before-pointer');
+  initVault(vault);
+  interrupt('save-before-pointer', 'save-before-pointer', ['save', vault]);
+  verify(vault, password);
+  assertNoPartialIsActive(vault);
+  run(['save', vault]); // A subsequent save proves the orphan generation does not strand the vault.
   verify(vault, password);
   assertNoPartialIsActive(vault);
 }
@@ -45,6 +56,10 @@ for (const point of ['save-before-rename', 'save-before-pointer']) {
   verify(vault, password);
   assertNoPartialIsActive(vault);
   verifyFails(vault, newPassword);
+  run(['password-change', vault]); // A subsequent rotation proves the orphan generation does not strand the vault.
+  verifyFails(vault, password);
+  verify(vault, newPassword);
+  assertNoPartialIsActive(vault);
 }
 
 {

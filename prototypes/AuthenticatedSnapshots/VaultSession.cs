@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Globalization;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -148,13 +149,13 @@ public sealed class VaultSession : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(document);
-        if (_generation == uint.MaxValue)
+        if (document.SchemaVersion != SupportedSchemaVersion)
         {
-            throw new InvalidOperationException("The per-key snapshot limit has been reached; change the vault password to rotate its key.");
+            throw new InvalidOperationException("The document uses an unsupported schema version.");
         }
 
         EnsureGenerationUnchanged();
-        uint nextGeneration = _generation + 1;
+        uint nextGeneration = NextGeneration();
         byte[] plaintext = JsonSerializer.SerializeToUtf8Bytes(document, JsonOptions);
         if (plaintext.LongLength > MaximumPlaintextLength)
         {
@@ -190,17 +191,17 @@ public sealed class VaultSession : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         ValidatePassword(newPassword);
         SnapshotDocument document = Load();
-        if (_generation == uint.MaxValue)
+        EnsureGenerationUnchanged();
+        if (PendingBackupJournal.Read(_directory).Any(entry => entry.VaultId == _vaultId))
         {
-            throw new InvalidOperationException("The snapshot generation limit has been reached.");
+            throw new InvalidOperationException("Publish pending automatic backups before changing the password.");
         }
 
-        EnsureGenerationUnchanged();
         byte[] newSalt = RandomNumberGenerator.GetBytes(SaltLength);
         byte[] newKey = DeriveKey(newPassword, newSalt);
         byte[] plaintext = JsonSerializer.SerializeToUtf8Bytes(document, JsonOptions);
         byte[] nonce = RandomNumberGenerator.GetBytes(NonceLength);
-        uint nextGeneration = _generation + 1;
+        uint nextGeneration = NextGeneration();
         byte[] header = CreateHeader(nextGeneration, nonce, plaintext.LongLength, newSalt);
         byte[] ciphertext = new byte[plaintext.Length];
         byte[] tag = new byte[TagLength];
@@ -284,7 +285,19 @@ public sealed class VaultSession : IDisposable
     public IReadOnlyList<SnapshotBackupReceipt> PublishPendingBackups()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        IReadOnlyList<PendingBackupEntry> entries = PendingBackupJournal.Read(_directory);
+        IReadOnlyList<PendingBackupEntry> entries;
+        try
+        {
+            entries = PendingBackupJournal.Read(_directory);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or InvalidDataException)
+        {
+            // A corrupt or unreadable journal is preserved untouched (no write) so a
+            // later session or manual inspection can recover it; publication is skipped
+            // this session and the vault still opens.
+            return [];
+        }
+
         List<PendingBackupEntry> remaining = [];
         List<SnapshotBackupReceipt> receipts = [];
         foreach (PendingBackupEntry entry in entries)
@@ -533,6 +546,23 @@ public sealed class VaultSession : IDisposable
         }
     }
 
+    private uint NextGeneration()
+    {
+        uint highest = _generation;
+        foreach (string path in Directory.GetFiles(_directory, "generation-*.dfsnap"))
+        {
+            ParsedSnapshot snapshot = ReadHeader(path);
+            if (snapshot.VaultId == _vaultId)
+            {
+                highest = Math.Max(highest, snapshot.Generation);
+            }
+        }
+
+        return highest == uint.MaxValue
+            ? throw new InvalidOperationException("The snapshot generation limit has been reached; migrate to a new vault.")
+            : highest + 1;
+    }
+
     private string GenerationPath(uint generation) => Path.Combine(_directory, $"generation-{generation:D10}.dfsnap");
 
     private static string ReadActiveGenerationPath(string directory)
@@ -571,10 +601,17 @@ public sealed class VaultSession : IDisposable
     }
 
     // Disposable fault-injection hook for the abrupt-interruption recovery matrix. It is
-    // a no-op unless DFSNAP_CRASH_POINT and DFSNAP_CRASH_MARKER are both set; production
-    // code never sets these variables.
+    // a no-op unless running inside the AuthenticatedSnapshots.Trial executable AND
+    // DFSNAP_CRASH_POINT and DFSNAP_CRASH_MARKER are both set; production code never
+    // sets these variables, and inherited environment variables cannot trigger the hook
+    // from any other assembly (for example the test host).
     private static void CrashIfRequested(string point)
     {
+        if (Assembly.GetEntryAssembly()?.GetName().Name != "AuthenticatedSnapshots.Trial")
+        {
+            return;
+        }
+
         if (string.Equals(Environment.GetEnvironmentVariable("DFSNAP_CRASH_POINT"), point, StringComparison.Ordinal))
         {
             string markerPath = Environment.GetEnvironmentVariable("DFSNAP_CRASH_MARKER")
@@ -629,7 +666,9 @@ public sealed class VaultSession : IDisposable
             SnapshotDocument document = JsonSerializer.Deserialize<SnapshotDocument>(plaintext, JsonOptions)
                 ?? throw new InvalidDataException("The authenticated snapshot payload is invalid.");
             ValidateSchemaVersion(document);
-            return parsed with { Document = document };
+            return document.Transactions is null || document.Configuration is null || document.Reconciliations is null
+                ? throw new InvalidDataException("The authenticated snapshot payload is invalid.")
+                : parsed with { Document = document };
         }
         catch (CryptographicException exception)
         {
