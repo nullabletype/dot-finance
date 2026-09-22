@@ -25,7 +25,8 @@ public static class PendingBackupJournal
         byte[] json = File.ReadAllBytes(path);
         return json.Length == 0
             ? []
-            : JsonSerializer.Deserialize<List<PendingBackupEntry>>(json, JsonOptions) ?? [];
+            : JsonSerializer.Deserialize<List<PendingBackupEntry>>(json, JsonOptions)
+                ?? throw new InvalidDataException("The pending-backup journal is corrupt.");
     }
 
     public static void Write(string directory, IReadOnlyList<PendingBackupEntry> entries)

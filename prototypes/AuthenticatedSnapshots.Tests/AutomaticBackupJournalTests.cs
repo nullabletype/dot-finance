@@ -196,6 +196,34 @@ public sealed class AutomaticBackupJournalTests : IDisposable
         }
     }
 
+    [Fact]
+    public void A_json_null_journal_is_corrupt_and_is_not_silently_overwritten()
+    {
+        string backupPath = Path.Combine(Path.GetTempPath(), $"dot-finance-auto-backup-null-{Guid.NewGuid():N}.dfsnap");
+        string journalPath = Path.Combine(_directory, PendingBackupJournal.FileName);
+        try
+        {
+            using (VaultSession vault = VaultSession.Create(_directory, "synthetic test password"))
+            {
+                vault.Save(SyntheticDocument());
+            }
+
+            File.WriteAllText(journalPath, "null");
+
+            using (VaultSession vault = VaultSession.Unlock(_directory, "synthetic test password"))
+            {
+                Assert.Empty(vault.PublishPendingBackups());
+                Assert.Throws<InvalidDataException>(() => vault.QueueAutomaticBackup(backupPath));
+            }
+
+            Assert.Equal("null", File.ReadAllText(journalPath));
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_directory))

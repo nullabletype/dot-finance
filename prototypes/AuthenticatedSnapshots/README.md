@@ -80,7 +80,7 @@ Completed on Linux ARM64 and macOS ARM64 (latency numbers recorded on the issue;
 - published PBKDF2 and AES-GCM known-answer vectors;
 - bounded hostile KDF/length, malformed-payload and password-policy tests;
 - schema-version validation with downgrade refusal;
-- abrupt termination at every save/pointer/backup/restore/password-change phase;
+- abrupt termination at the save/pointer/backup/restore/password-change phases (journal publication and restore-after-rename are not yet fault-injected);
 - read-only, stale-partial, lock-contention and missing-parent backup trials;
 - durable automatic-backup pending/retry state tied to the saved generation.
 
