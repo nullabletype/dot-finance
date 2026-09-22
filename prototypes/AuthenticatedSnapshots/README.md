@@ -71,7 +71,7 @@ Run:
 npm run snapshots:fault-smoke
 ```
 
-An environment-gated crash hook (`DFSNAP_CRASH_POINT` / `DFSNAP_CRASH_MARKER`, inactive in production) kills a child process at each persistence phase — before the generation rename, before the pointer update, at backup staging, at restore staging, and before the password-change pointer update — and the smoke script proves the vault recovers to a complete old-or-new state, never mixed. `FilesystemFaultTests` additionally covers stale partial files, single-writer lock contention, restore into a non-empty directory, backup over a different generation, a missing backup parent directory, and a read-only vault directory (Linux; skipped under a privileged account because root bypasses permission checks).
+An environment-gated crash hook (`DFSNAP_CRASH_POINT` / `DFSNAP_CRASH_MARKER`, inactive in production and confined to the trial executable) kills a child process at the covered persistence phases — before the generation rename, before the pointer update, at backup staging, at restore staging, and before the password-change pointer update — and the smoke script proves the vault recovers to a complete old-or-new state, never mixed. Interruption is not yet fault-injected for journal publication or restore-after-rename. `FilesystemFaultTests` additionally covers stale partial files, single-writer lock contention, restore into a non-empty directory, backup over a different generation, a missing backup parent directory, and a read-only vault directory (Linux; skipped under a privileged account because root bypasses permission checks).
 
 ## Evidence status
 
