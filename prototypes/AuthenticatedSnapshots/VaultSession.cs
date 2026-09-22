@@ -96,7 +96,19 @@ public sealed class VaultSession : IDisposable
                 }
 
                 ParsedSnapshot latest = snapshots.MaxBy(snapshot => snapshot.Generation)!;
-                return new VaultSession(directory, writerLock, key, first.Salt, first.VaultId, latest.Generation, latest.Document);
+                VaultSession session = new(directory, writerLock, key, first.Salt, first.VaultId, latest.Generation, latest.Document);
+                try
+                {
+                    session.PublishPendingBackups();
+                }
+                catch
+                {
+                    // Best-effort only: retrying a pending automatic backup must never
+                    // block the vault from opening. Unexpected failures leave entries in
+                    // the journal for a later session to retry.
+                }
+
+                return session;
             }
             catch
             {
@@ -243,6 +255,84 @@ public sealed class VaultSession : IDisposable
 
             File.Move(temporaryPath, backupPath);
             return new SnapshotBackupReceipt(_vaultId, _generation);
+        }
+        finally
+        {
+            File.Delete(temporaryPath);
+        }
+    }
+
+    public void QueueAutomaticBackup(string targetPath)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetPath);
+        if (_generation == 0)
+        {
+            throw new InvalidOperationException("Save vault state before queueing an automatic backup.");
+        }
+
+        targetPath = Path.GetFullPath(targetPath);
+        List<PendingBackupEntry> entries = [.. PendingBackupJournal.Read(_directory)];
+        entries.Add(new PendingBackupEntry(_vaultId, _generation, targetPath));
+        PendingBackupJournal.Write(_directory, entries);
+    }
+
+    public IReadOnlyList<SnapshotBackupReceipt> PublishPendingBackups()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        IReadOnlyList<PendingBackupEntry> entries = PendingBackupJournal.Read(_directory);
+        List<PendingBackupEntry> remaining = [];
+        List<SnapshotBackupReceipt> receipts = [];
+        foreach (PendingBackupEntry entry in entries)
+        {
+            if (entry.VaultId != _vaultId)
+            {
+                remaining.Add(entry);
+                continue;
+            }
+
+            try
+            {
+                receipts.Add(PublishAutomaticBackup(entry.Generation, entry.TargetPath));
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or VaultAuthenticationException)
+            {
+                // A failed backup must never block the vault. Keep the entry pending so
+                // a later session retries it; it is never silently dropped.
+                remaining.Add(entry);
+            }
+        }
+
+        if (remaining.Count != entries.Count)
+        {
+            PendingBackupJournal.Write(_directory, remaining);
+        }
+
+        return receipts;
+    }
+
+    private SnapshotBackupReceipt PublishAutomaticBackup(uint generation, string targetPath)
+    {
+        if (File.Exists(targetPath))
+        {
+            ParsedSnapshot existing = ReadAndAuthenticate(targetPath, _key);
+            return existing.VaultId == _vaultId && existing.Generation == generation
+                ? new SnapshotBackupReceipt(_vaultId, generation)
+                : throw new IOException("The backup path already contains a different authenticated generation.");
+        }
+
+        string temporaryPath = targetPath + $".{Guid.NewGuid():N}.partial";
+        try
+        {
+            CopyAndFlush(GenerationPath(generation), temporaryPath);
+            ParsedSnapshot staged = ReadAndAuthenticate(temporaryPath, _key);
+            if (staged.VaultId != _vaultId || staged.Generation != generation)
+            {
+                throw new InvalidDataException("The staged backup is not the requested vault generation.");
+            }
+
+            File.Move(temporaryPath, targetPath);
+            return new SnapshotBackupReceipt(_vaultId, generation);
         }
         finally
         {
