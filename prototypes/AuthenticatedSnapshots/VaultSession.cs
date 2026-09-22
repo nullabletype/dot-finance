@@ -34,6 +34,10 @@ public sealed class VaultSession : IDisposable
     private IReadOnlyList<IndexedTransaction> _searchIndex = [];
     private bool _disposed;
 
+    // Disposable experiment instrumentation. Null in production; set by the trial to
+    // receive per-phase save timings. Each callback carries a phase name and elapsed ms.
+    public static Action<string, double>? SavePhaseTiming { get; set; }
+
     private VaultSession(string directory, FileStream writerLock, byte[] key, byte[] salt, Guid vaultId, uint generation, SnapshotDocument? document)
     {
         _directory = directory;
@@ -156,7 +160,7 @@ public sealed class VaultSession : IDisposable
 
         EnsureGenerationUnchanged();
         uint nextGeneration = NextGeneration();
-        byte[] plaintext = JsonSerializer.SerializeToUtf8Bytes(document, JsonOptions);
+        byte[] plaintext = TimeSavePhase("save-serialize", () => JsonSerializer.SerializeToUtf8Bytes(document, JsonOptions));
         if (plaintext.LongLength > MaximumPlaintextLength)
         {
             throw new InvalidOperationException("The snapshot exceeds the supported size.");
@@ -168,14 +172,15 @@ public sealed class VaultSession : IDisposable
         byte[] tag = new byte[TagLength];
         try
         {
-            using (AesGcm aes = new(_key, TagLength))
+            TimeSavePhase("save-encrypt", () =>
             {
+                using AesGcm aes = new(_key, TagLength);
                 aes.Encrypt(nonce, plaintext, ciphertext, tag, header);
-            }
+            });
 
             Publish(nextGeneration, header, ciphertext, tag);
             CrashIfRequested("save-before-pointer"); // Disposable fault-injection hook; no-op unless DFSNAP_CRASH_POINT is set.
-            PublishActiveGeneration(_directory, nextGeneration);
+            TimeSavePhase("save-pointer", () => PublishActiveGeneration(_directory, nextGeneration));
             _generation = nextGeneration;
             _document = document;
             _searchIndex = BuildSearchIndex(document.Transactions);
@@ -524,17 +529,18 @@ public sealed class VaultSession : IDisposable
         string temporaryPath = Path.Combine(_directory, $".{Guid.NewGuid():N}.partial");
         try
         {
-            using (FileStream stream = new(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024, FileOptions.WriteThrough))
+            TimeSavePhase("save-write", () =>
             {
+                using FileStream stream = new(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024, FileOptions.WriteThrough);
                 stream.Write(header);
                 stream.Write(ciphertext);
                 stream.Write(tag);
                 stream.Flush(flushToDisk: true);
-            }
+            });
 
-            _ = ReadAndAuthenticate(temporaryPath, key ?? _key);
+            TimeSavePhase("save-validate", () => _ = ReadAndAuthenticate(temporaryPath, key ?? _key));
             CrashIfRequested("save-before-rename"); // Disposable fault-injection hook; no-op unless DFSNAP_CRASH_POINT is set.
-            File.Move(temporaryPath, finalPath);
+            TimeSavePhase("save-rename", () => File.Move(temporaryPath, finalPath));
         }
         finally
         {
@@ -637,6 +643,43 @@ public sealed class VaultSession : IDisposable
             File.WriteAllText(markerPath, point);
             Process.GetCurrentProcess().Kill();
             Thread.Sleep(Timeout.Infinite);
+        }
+    }
+
+    private static T TimeSavePhase<T>(string name, Func<T> action)
+    {
+        if (SavePhaseTiming is null)
+        {
+            return action();
+        }
+
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        try
+        {
+            return action();
+        }
+        finally
+        {
+            SavePhaseTiming(name, stopwatch.Elapsed.TotalMilliseconds);
+        }
+    }
+
+    private static void TimeSavePhase(string name, Action action)
+    {
+        if (SavePhaseTiming is null)
+        {
+            action();
+            return;
+        }
+
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        try
+        {
+            action();
+        }
+        finally
+        {
+            SavePhaseTiming(name, stopwatch.Elapsed.TotalMilliseconds);
         }
     }
 
