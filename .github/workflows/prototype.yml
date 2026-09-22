@@ -72,6 +72,7 @@ jobs:
             artifacts/offline-network/
             artifacts/build.json
             artifacts/authenticated-snapshots/
+            artifacts/snapshot-trial/
           retention-days: 7
           if-no-files-found: error
 
@@ -154,3 +155,72 @@ jobs:
           name: persistence-cycle-final-${{ github.sha }}
           path: cycle/
           retention-days: 7
+
+  snapshot-cycle-macos:
+    name: Snapshot backup cycle (macOS start)
+    needs: desktop
+    runs-on: macos-latest
+    steps:
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: prototype-macos-latest-${{ github.sha }}
+          path: build
+      - run: mkdir -p cycle && dotnet build/snapshot-trial/AuthenticatedSnapshots.Trial.dll --cycle initialize cycle cycle/portable.dfsnap
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: snapshot-cycle-macos-${{ github.sha }}
+          path: cycle/portable.dfsnap
+          retention-days: 7
+
+  snapshot-cycle-linux:
+    name: Snapshot backup cycle (Linux restore)
+    needs: snapshot-cycle-macos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: prototype-ubuntu-latest-${{ github.sha }}
+          path: build
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: snapshot-cycle-macos-${{ github.sha }}
+          path: incoming
+      - run: mkdir -p cycle && dotnet build/snapshot-trial/AuthenticatedSnapshots.Trial.dll --cycle continue cycle incoming/portable.dfsnap cycle/portable.dfsnap
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: snapshot-cycle-linux-${{ github.sha }}
+          path: cycle/portable.dfsnap
+          retention-days: 7
+
+  snapshot-cycle-macos-final:
+    name: Snapshot backup cycle (macOS final restore)
+    needs: snapshot-cycle-linux
+    runs-on: macos-latest
+    steps:
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: prototype-macos-latest-${{ github.sha }}
+          path: build
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: snapshot-cycle-linux-${{ github.sha }}
+          path: incoming
+      - run: mkdir -p cycle && dotnet build/snapshot-trial/AuthenticatedSnapshots.Trial.dll --cycle verify cycle incoming/portable.dfsnap
+
+  snapshot-cycle-windows:
+    name: Snapshot backup cycle (Windows restore)
+    needs: snapshot-cycle-linux
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: prototype-windows-latest-${{ github.sha }}
+          path: build
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: snapshot-cycle-linux-${{ github.sha }}
+          path: incoming
+      - shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force cycle | Out-Null
+          dotnet build/snapshot-trial/AuthenticatedSnapshots.Trial.dll --cycle verify cycle incoming/portable.dfsnap

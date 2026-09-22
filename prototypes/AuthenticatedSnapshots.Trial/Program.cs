@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 using AuthenticatedSnapshots;
@@ -14,6 +15,12 @@ const string password = "fictional benchmark password — not user data";
 if (args.Length > 0 && args[0] == "--fault")
 {
     Environment.ExitCode = RunFaultCommand(args[1..]);
+    return;
+}
+
+if (args.Length > 0 && args[0] == "--cycle")
+{
+    Environment.ExitCode = RunCycleCommand(args[1..]);
     return;
 }
 
@@ -249,6 +256,120 @@ static int FaultVerify(string vaultDirectory, string password)
         document.Configuration["theme"],
         FaultDocumentChecksum(document));
     Console.WriteLine(JsonSerializer.Serialize(receipt));
+    return 0;
+}
+
+static int RunCycleCommand(string[] args)
+{
+    if (args.Length == 0)
+    {
+        Console.Error.WriteLine("Usage: --cycle <initialize|continue|verify> ...");
+        return 2;
+    }
+
+    switch (args[0])
+    {
+        case "initialize" when args.Length == 3:
+            return CycleInitialize(args[1], args[2]);
+        case "continue" when args.Length == 4:
+            return CycleContinue(args[1], args[2], args[3]);
+        case "verify" when args.Length == 3:
+            return CycleVerify(args[1], args[2]);
+        default:
+            Console.Error.WriteLine($"Unknown cycle subcommand or argument count: {string.Join(' ', args)}");
+            return 2;
+    }
+}
+
+static int CycleInitialize(string vaultDirectory, string backupPath)
+{
+    Directory.CreateDirectory(vaultDirectory);
+    using (VaultSession vault = VaultSession.Create(vaultDirectory, faultPassword))
+    {
+        vault.Save(FaultDocument());
+        vault.CreateBackup(backupPath);
+    }
+
+    return RunLeakCheck(vaultDirectory, backupPath);
+}
+
+static int CycleContinue(string vaultDirectory, string incomingBackup, string outgoingBackup)
+{
+    VaultSession.Restore(incomingBackup, vaultDirectory, faultPassword);
+    int verifyResult = VerifyRestoredDocument(vaultDirectory);
+    if (verifyResult != 0)
+    {
+        return verifyResult;
+    }
+
+    using (VaultSession vault = VaultSession.Unlock(vaultDirectory, faultPassword))
+    {
+        vault.CreateBackup(outgoingBackup);
+    }
+
+    return RunLeakCheck(vaultDirectory, incomingBackup, outgoingBackup);
+}
+
+static int CycleVerify(string vaultDirectory, string incomingBackup)
+{
+    VaultSession.Restore(incomingBackup, vaultDirectory, faultPassword);
+    int verifyResult = VerifyRestoredDocument(vaultDirectory);
+    return verifyResult != 0 ? verifyResult : RunLeakCheck(vaultDirectory, incomingBackup);
+}
+
+static int VerifyRestoredDocument(string vaultDirectory)
+{
+    using VaultSession vault = VaultSession.Unlock(vaultDirectory, faultPassword);
+    SnapshotDocument loaded = vault.Load();
+    SnapshotDocument expected = FaultDocument();
+    bool matches = loaded.Transactions.Count == 1
+        && loaded.Reconciliations.Count == 1
+        && loaded.Transactions[0].Id == "FAULT-0001"
+        && loaded.Transactions[0].Amount == 42.50m
+        && loaded.Transactions[0].Account == "Fictional Card"
+        && FaultDocumentChecksum(loaded) == FaultDocumentChecksum(expected);
+    if (!matches)
+    {
+        Console.Error.WriteLine("Restored snapshot does not match the expected fault document.");
+        return 1;
+    }
+
+    return 0;
+}
+
+static int RunLeakCheck(string vaultDirectory, params string[] backupPaths)
+{
+    List<string> files = [];
+    if (Directory.Exists(vaultDirectory))
+    {
+        files.AddRange(Directory.GetFiles(vaultDirectory, "generation-*.dfsnap"));
+        foreach (string name in new[] { "active-generation", ".vault.lock", "pending-backups.json" })
+        {
+            string path = Path.Combine(vaultDirectory, name);
+            if (File.Exists(path))
+            {
+                files.Add(path);
+            }
+        }
+    }
+
+    files.AddRange(backupPaths.Where(File.Exists));
+
+    string[] markers = [faultPassword, "\"FAULT-0001\"", "\"Example Bank\"", "\"42.50\"", "\"Synthetic note\""];
+    foreach (string file in files)
+    {
+        string content = Encoding.Latin1.GetString(File.ReadAllBytes(file));
+        foreach (string marker in markers)
+        {
+            if (content.Contains(marker, StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine($"Plaintext marker '{marker}' found in {file}");
+                return 1;
+            }
+        }
+    }
+
+    Console.WriteLine($"PASS: no plaintext markers in {files.Count} files");
     return 0;
 }
 
