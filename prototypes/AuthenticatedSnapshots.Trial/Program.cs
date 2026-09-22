@@ -29,11 +29,16 @@ try
 {
     SnapshotDocument document = GenerateDocument();
     long memoryBefore = GC.GetTotalMemory(forceFullCollection: true);
+    Dictionary<string, double> savePhases = new(StringComparer.Ordinal);
+    VaultSession.SavePhaseTiming = (name, milliseconds) =>
+        savePhases[name] = savePhases.TryGetValue(name, out double accumulated) ? accumulated + milliseconds : milliseconds;
     double saveMilliseconds;
     using (VaultSession vault = VaultSession.Create(vaultPath, password))
     {
         saveMilliseconds = Measure(() => vault.Save(document));
     }
+
+    VaultSession.SavePhaseTiming = null;
 
     double unlockMilliseconds;
     double backupMilliseconds;
@@ -79,6 +84,7 @@ try
         saveMilliseconds,
         unlockMilliseconds,
         backupMilliseconds,
+        savePhases,
         searchP95,
         memoryAfter - memoryBefore,
         vaultBytes,
@@ -306,6 +312,7 @@ internal sealed record TrialEvidence(
     double SaveMilliseconds,
     double UnlockMilliseconds,
     double BackupMilliseconds,
+    IReadOnlyDictionary<string, double> SavePhaseMilliseconds,
     IReadOnlyDictionary<string, double> SearchP95Milliseconds,
     long RetainedManagedMemoryBytes,
     long VaultBytes,
