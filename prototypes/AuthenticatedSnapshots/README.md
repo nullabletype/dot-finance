@@ -63,16 +63,32 @@ It generates 100,000 fictional transactions spanning 20 years, then records save
 
 Memory and disk/write amplification are reported for owner assessment; passing latency alone cannot select this design. Failure of cryptographic review, malformed-input handling, single-writer correctness, recovery, migration, portability or maintainability rejects the candidate.
 
-## Missing evidence
+## Fault and recovery trial
 
-Until completed, these keep the recommendation at **rework / no storage selection**:
+Run:
+
+```sh
+npm run snapshots:fault-smoke
+```
+
+An environment-gated crash hook (`DFSNAP_CRASH_POINT` / `DFSNAP_CRASH_MARKER`, inactive in production) kills a child process at each persistence phase — before the generation rename, before the pointer update, at backup staging, at restore staging, and before the password-change pointer update — and the smoke script proves the vault recovers to a complete old-or-new state, never mixed. `FilesystemFaultTests` additionally covers stale partial files, single-writer lock contention, restore into a non-empty directory, backup over a different generation, a missing backup parent directory, and a read-only vault directory (Linux; skipped under a privileged account because root bypasses permission checks).
+
+## Evidence status
+
+Completed on Linux ARM64 and macOS ARM64 (latency numbers recorded on the issue; all latency gates pass):
 
 - published PBKDF2 and AES-GCM known-answer vectors;
-- bounded hostile KDF/length and broader malformed-payload tests;
+- bounded hostile KDF/length, malformed-payload and password-policy tests;
+- schema-version validation with downgrade refusal;
 - abrupt termination at every save/pointer/backup/restore/password-change phase;
-- disk-full, permission/removal and stale-partial trials;
-- explicit schema migration and downgrade behavior;
-- durable automatic-backup pending/retry state tied to reconciliation completion;
-- pairwise/cycle evidence on macOS, Windows and Linux;
-- plaintext/log/temporary-file inspection and blocked-network trace;
+- read-only, stale-partial, lock-contention and missing-parent backup trials;
+- durable automatic-backup pending/retry state tied to the saved generation.
+
+Remaining (these still keep the recommendation at **rework / no storage selection**):
+
+- disk-full and full directory-removal fault matrix (not deterministically coverable in the current environment);
+- pairwise/cycle backup-restoration evidence on macOS, Windows and Linux (requires the platform matrix);
+- plaintext/log/temporary-file inspection;
+- executing the blocked-network trace in CI (the Linux step is wired but has not run here);
+- calibrating the provisional 200,000-iteration count on the slowest supported machine;
 - independent cryptographic, persistence, test and architecture review.
