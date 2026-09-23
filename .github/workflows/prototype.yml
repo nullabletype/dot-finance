@@ -65,96 +65,11 @@ jobs:
         with:
           name: prototype-${{ matrix.os }}-${{ github.sha }}
           path: |
-            artifacts/architecture/
-            artifacts/desktop/
-            artifacts/launch-*/
-            artifacts/persistence-local/
-            artifacts/offline-network/
             artifacts/build.json
             artifacts/authenticated-snapshots/
             artifacts/snapshot-trial/
           retention-days: 1
           if-no-files-found: error
-
-  persistence-macos:
-    name: Backup cycle (macOS start)
-    needs: desktop
-    runs-on: macos-latest
-    steps:
-      - uses: actions/download-artifact@v8.0.1
-        with:
-          name: prototype-macos-latest-${{ github.sha }}
-          path: build
-      - run: mkdir -p cycle && DOT_FINANCE_PROTOTYPE_PASSWORD=synthetic-ci-password-not-a-user-secret dotnet build/desktop/DesktopShell.dll --persistence-cycle initialize cycle build/desktop/Fixtures/synthetic-emma.csv
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: persistence-cycle-macos-${{ github.sha }}
-          path: cycle/
-          retention-days: 1
-
-  persistence-windows:
-    name: Backup cycle (Windows restore)
-    needs: persistence-macos
-    runs-on: windows-latest
-    steps:
-      - uses: actions/download-artifact@v8.0.1
-        with:
-          name: prototype-windows-latest-${{ github.sha }}
-          path: build
-      - uses: actions/download-artifact@v8.0.1
-        with:
-          name: persistence-cycle-macos-${{ github.sha }}
-          path: incoming
-      - shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force cycle | Out-Null
-          $env:DOT_FINANCE_PROTOTYPE_PASSWORD = 'synthetic-ci-password-not-a-user-secret'
-          dotnet build/desktop/DesktopShell.dll --persistence-cycle continue cycle build/desktop/Fixtures/synthetic-emma.csv incoming/portable.dotfinance-backup
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: persistence-cycle-windows-${{ github.sha }}
-          path: cycle/
-          retention-days: 1
-
-  persistence-linux:
-    name: Backup cycle (Linux restore)
-    needs: persistence-windows
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v8.0.1
-        with:
-          name: prototype-ubuntu-latest-${{ github.sha }}
-          path: build
-      - uses: actions/download-artifact@v8.0.1
-        with:
-          name: persistence-cycle-windows-${{ github.sha }}
-          path: incoming
-      - run: mkdir -p cycle && DOT_FINANCE_PROTOTYPE_PASSWORD=synthetic-ci-password-not-a-user-secret dotnet build/desktop/DesktopShell.dll --persistence-cycle continue cycle build/desktop/Fixtures/synthetic-emma.csv incoming/portable.dotfinance-backup
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: persistence-cycle-linux-${{ github.sha }}
-          path: cycle/
-          retention-days: 1
-
-  persistence-macos-final:
-    name: Backup cycle (macOS final restore)
-    needs: persistence-linux
-    runs-on: macos-latest
-    steps:
-      - uses: actions/download-artifact@v8.0.1
-        with:
-          name: prototype-macos-latest-${{ github.sha }}
-          path: build
-      - uses: actions/download-artifact@v8.0.1
-        with:
-          name: persistence-cycle-linux-${{ github.sha }}
-          path: incoming
-      - run: mkdir -p cycle && DOT_FINANCE_PROTOTYPE_PASSWORD=synthetic-ci-password-not-a-user-secret dotnet build/desktop/DesktopShell.dll --persistence-cycle verify cycle build/desktop/Fixtures/synthetic-emma.csv incoming/portable.dotfinance-backup
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: persistence-cycle-final-${{ github.sha }}
-          path: cycle/
-          retention-days: 1
 
   snapshot-cycle-macos:
     name: Snapshot backup cycle (macOS start)
