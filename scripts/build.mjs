@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, rmSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 
 const project = 'prototypes/DesktopShell/DesktopShell.csproj';
@@ -17,6 +18,15 @@ function run(command, args) {
   const result = spawnSync(command, args, { stdio: 'inherit', shell: false });
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
+}
+// Strip native debug symbols from the publish output; they are large and never
+// required by the smoke/cycle evidence (SkiaSharp ships ~300MB of .pdb files).
+function deletePdb(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) deletePdb(path);
+    else if (entry.name.endsWith('.pdb')) rmSync(path, { force: true });
+  }
 }
 const cli = 'node_modules/likec4/bin/likec4.mjs';
 run(process.execPath, [cli, 'format', '--check', 'docs/architecture']);
@@ -39,6 +49,7 @@ run('dotnet', ['run', '--project', snapshotTrial, '--configuration', 'Release', 
 run('dotnet', ['publish', snapshotTrial, '--no-build', '--configuration', 'Release', '--output', 'artifacts/snapshot-trial']);
 rmSync('artifacts/desktop', { recursive: true, force: true });
 run('dotnet', ['publish', project, '--no-build', '--configuration', 'Release', '--output', 'artifacts/desktop']);
+deletePdb('artifacts/desktop');
 const endCommit = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' });
 const endStatus = spawnSync('git', ['status', '--porcelain'], { encoding: 'utf8' });
 if (endCommit.status !== 0 || endStatus.status !== 0 || endCommit.stdout !== commit.stdout || endStatus.stdout !== status.stdout) {
