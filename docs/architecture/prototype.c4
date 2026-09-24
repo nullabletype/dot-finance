@@ -17,7 +17,7 @@ model {
       description 'Reads the committed fictional fixture under explicitly recorded, unverified Emma format assumptions.'
     }
     vault = component 'Experimental encrypted vault' {
-      technology 'Microsoft.Data.Sqlite and SQLCipher'
+      technology 'Microsoft.Data.Sqlite and SQLite3MC'
       description 'Persists one JSON state document in an encrypted SQLite database and makes validated atomic backup and restore replacements.'
     }
     evidence = component 'Opt-in launch evidence' {
