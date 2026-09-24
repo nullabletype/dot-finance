@@ -33,7 +33,7 @@ The prototype phase precedes detailed production planning. Follow the issues and
 4. [Agent-loop failure handling and recovery](https://github.com/nullabletype/dot-finance/issues/4)
 5. [Owner decision gate before production planning](https://github.com/nullabletype/dot-finance/issues/5)
 
-The disposable desktop experiments are under [prototypes/DesktopShell](prototypes/DesktopShell/README.md). All displayed amounts and imported records are fictional. Issue #2 adds a bounded synthetic CSV importer and provisional SQLCipher persistence/backup path; there is no financial engine, payment integration, production importer, or running agent controller.
+The disposable desktop experiments are under [prototypes/DesktopShell](prototypes/DesktopShell/README.md). All displayed amounts and imported records are fictional. Issue #2 adds a bounded synthetic CSV importer and a SQLite3MC-encrypted persistence/backup path; there is no financial engine, payment integration, production importer, or running agent controller.
 
 With .NET 10 SDK (see `global.json`) and Node 22.22.3 or newer installed:
 
