@@ -73,6 +73,33 @@ npm run snapshots:fault-smoke
 
 An environment-gated crash hook (`DFSNAP_CRASH_POINT` / `DFSNAP_CRASH_MARKER`, inactive in production and confined to the trial executable) kills a child process at the covered persistence phases — before the generation rename, before the pointer update, at backup staging, at restore staging, and before the password-change pointer update — and the smoke script proves the vault recovers to a complete old-or-new state, never mixed. Interruption is not yet fault-injected for journal publication or restore-after-rename. `FilesystemFaultTests` additionally covers stale partial files, single-writer lock contention, restore into a non-empty directory, backup over a different generation, a missing backup parent directory, and a read-only vault directory (Linux; skipped under a privileged account because root bypasses permission checks).
 
+## Manual cross-platform backup cycle
+
+CI runs the macOS → Linux → macOS (+ one-direction Windows) cycle automatically, but the same evidence can be produced by hand on your own machines (requires the .NET 10 SDK). Build the trial on each machine, then use a fresh, empty directory per stage.
+
+macOS (create vault + portable backup):
+
+```sh
+dotnet run --project prototypes/AuthenticatedSnapshots.Trial --configuration Release -- \
+  --cycle initialize cycle-init cycle-init/portable.dfsnap
+```
+
+Copy `cycle-init/portable.dfsnap` to the Linux machine as `incoming/portable.dfsnap`, then:
+
+```sh
+dotnet run --project prototypes/AuthenticatedSnapshots.Trial --configuration Release -- \
+  --cycle continue cycle-linux incoming/portable.dfsnap cycle-linux/portable.dfsnap
+```
+
+Copy `cycle-linux/portable.dfsnap` back to macOS as `incoming/portable.dfsnap`, then:
+
+```sh
+dotnet run --project prototypes/AuthenticatedSnapshots.Trial --configuration Release -- \
+  --cycle verify cycle-final incoming/portable.dfsnap
+```
+
+Each command prints `PASS: no plaintext markers in N files` and exits 0 on a correct authenticated round-trip; a document mismatch or a plaintext leak exits non-zero. Windows: run `--cycle verify` against the Linux backup (one direction).
+
 ## Evidence status
 
 Completed on Linux ARM64 and macOS ARM64 (latency numbers recorded on the issue; all latency gates pass):
