@@ -20,15 +20,15 @@ Development restore requires package-registry access. The published app itself h
 
 ## Persistence design under test
 
-- `PrototypeVault` is the agreed behavioral seam. It stores one JSON state document in SQLite encrypted by SQLCipher, using the password supplied for the current process.
-- The working database and backup are both SQLCipher databases protected by the same password. The password is retained in process memory while a vault is open but is not written to app settings, evidence, logs, or files.
+- `PrototypeVault` is the agreed behavioral seam. It stores one JSON state document in SQLite encrypted by SQLite3MC, using the password supplied for the current process.
+- The working database and backup are both SQLite3MC databases protected by the same password. The password is retained in process memory while a vault is open but is not written to app settings, evidence, logs, or files.
 - SQLite transactions protect saves. Backups are written as a sibling `.partial` file, validated, and atomically renamed; restore validates a sibling candidate before replacing working state.
-- Wrong passwords and SQLCipher-detected corruption produce a generic authentication/damage failure. They do not replace an existing working database.
+- Wrong passwords and SQLite3MC-detected corruption produce a generic authentication/damage failure. They do not replace an existing working database.
 - `npm run persistence:smoke` performs create → abrupt save interruption → recovery → abrupt backup interruption → recovery → two backup moves. It writes only local evidence under `artifacts/persistence-local/`.
 
 ### Alternatives considered
 
-1. **SQLCipher-backed SQLite — selected provisionally.** Established full-database encryption, authenticated pages, SQLite transactions, and portable native packages let the prototype test storage and backup without designing a cryptographic envelope.
+1. **SQLite3MC-backed SQLite — selected.** Established full-database encryption (default sqleet ChaCha20-Poly1305 cipher), authenticated pages, SQLite transactions, and portable native packages let the prototype test storage and backup without designing a cryptographic envelope. SQLite3MC is the maintained successor to the deprecated SQLCipher bundle.
 2. **Application-defined AES-GCM file plus a password KDF — rejected for this experiment.** The primitives are established, but choosing and versioning the envelope, KDF parameters, nonce handling, and migration protocol would create bespoke cryptographic design.
 3. **Operating-system credential stores — rejected for this question.** They do not satisfy a user-password-protected backup that can move unchanged between macOS, Windows, and Linux.
 4. **Plain SQLite inside an encrypted archive — rejected.** It introduces plaintext working storage and temporary-file handling that conflict with the experiment.
@@ -64,4 +64,4 @@ Byte-pattern inspection inventories every file in the app-managed scenario works
 
 ## Current decision
 
-Provisional recommendation: retain SQLCipher and this vault seam only for the guided-workflow experiment if the clean cross-platform cycle and independent review pass. Rework is required before production use. The prototype does not establish password recovery, production migrations, large-dataset behavior, packaging/signing, or final security suitability.
+Decision (#12): SQLite3MC is selected as the maintained replacement for the deprecated SQLCipher bundle. Retain this vault seam for the guided-workflow experiment; rework is still required before production use. The prototype does not establish password recovery, production migrations, large-dataset behavior, packaging/signing, or final security suitability.
