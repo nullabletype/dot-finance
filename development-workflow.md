@@ -79,7 +79,7 @@ likec4 build -o <artifact-directory>
 
 Invoke the pinned local CLI through repository scripts; do not fetch an unpinned latest version at build time. Final paths and script names will be selected and verified during setup.
 
-Generate an interactive static site as a build artifact associated with the tested commit. Optional PNG exports can support PR review, but require Playwright and its browser dependencies. Keep generated outputs out of the authored source tree. Public hosting is not required; publishing diagrams needs an explicit decision.
+Generate the interactive static site during the build and associate its validation with the tested commit through the workflow result. Do not retain the generated site or optional PNG exports as GitHub Actions artifacts; reviewers can generate them locally from the tested source. Keep generated outputs out of the authored source tree. Public hosting is not required; publishing diagrams needs an explicit decision.
 
 CLI validation detects model syntax errors and manual layout drift. It does not prove that the diagrams match the C# implementation. Enforce that separately through architectural-impact review and, where useful, automated dependency rules applied to the actual code and model consistency checks. An unchanged diagram is acceptable when the implementation change has no architectural impact.
 
