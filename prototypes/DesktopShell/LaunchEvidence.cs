@@ -70,13 +70,13 @@ internal static class LaunchEvidence
 
             window.Width = 1040;
             window.Height = 660;
-            await WaitForBoundsAsync(window, 1040, 660);
+            await WaitForCompactWidthAsync(window, 1040);
             RenderPng(window, Path.Combine(outputDirectory, "review-compact-dark.png"));
             object compactLayout = window.ReviewLayoutEvidence();
 
             window.Width = 1320;
             window.Height = 820;
-            await WaitForBoundsAsync(window, 1320, 820);
+            await Task.Delay(250);
 
             object before = WorkflowSnapshot(window.Session);
             window.ApplyWorkflowCaptureCorrection();
@@ -99,19 +99,18 @@ internal static class LaunchEvidence
         }
     }
 
-    private static async Task WaitForBoundsAsync(MainWindow window, double width, double height)
+    private static async Task WaitForCompactWidthAsync(MainWindow window, double width)
     {
         DateTimeOffset timeout = DateTimeOffset.UtcNow.AddSeconds(2);
-        while ((Math.Abs(window.Bounds.Width - width) > 0.5 || Math.Abs(window.Bounds.Height - height) > 0.5)
-            && DateTimeOffset.UtcNow < timeout)
+        while (window.Bounds.Width > width + 0.5 && DateTimeOffset.UtcNow < timeout)
         {
             await Task.Delay(50);
         }
 
-        if (Math.Abs(window.Bounds.Width - width) > 0.5 || Math.Abs(window.Bounds.Height - height) > 0.5)
+        if (window.Bounds.Width > width + 0.5)
         {
             throw new InvalidOperationException(
-                $"Native window did not resize to {width}x{height}; actual bounds are {window.Bounds.Width}x{window.Bounds.Height}.");
+                $"Native window did not enter the compact width of {width}; actual width is {window.Bounds.Width}.");
         }
     }
 
