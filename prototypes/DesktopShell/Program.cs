@@ -5,23 +5,11 @@ namespace DesktopShell;
 internal static class Program
 {
     [STAThread]
-    public static int Main(string[] args)
+    public static int Main(string[] args) => args switch
     {
-        if (args is ["--persistence-cycle", ..])
-        {
-            return PersistenceScenario.RunCommand(args);
-        }
-
-        if (args is ["--persistence-interrupt", ..])
-        {
-            return PersistenceScenario.RunInterruptionCommand(args);
-        }
-
-        if (args is ["--persistence-check-recovery", ..])
-        {
-            return PersistenceScenario.RunRecoveryCheckCommand(args);
-        }
-
-        return AppBuilder.Configure<App>().UsePlatformDetect().StartWithClassicDesktopLifetime(args);
-    }
+        ["--persistence-cycle", ..] => PersistenceScenario.RunCommand(args),
+        ["--persistence-interrupt", ..] => PersistenceScenario.RunInterruptionCommand(args),
+        ["--persistence-check-recovery", ..] => PersistenceScenario.RunRecoveryCheckCommand(args),
+        _ => AppBuilder.Configure<App>().UsePlatformDetect().StartWithClassicDesktopLifetime(args)
+    };
 }

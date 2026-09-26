@@ -1,0 +1,477 @@
+<!doctype html>
+<!-- Three throwaway UI directions for guided reconciliation, switchable with ?variant=a|b|c. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Throwaway dot-finance reconciliation UI prototype.">
+  <title>dot-finance — reconciliation UI prototype</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #090b10;
+      --panel: #10131a;
+      --panel-raised: #151922;
+      --panel-soft: #0d1016;
+      --line: #272d39;
+      --line-soft: #1d222c;
+      --text: #f3f5f8;
+      --muted: #929baa;
+      --quiet: #626c7a;
+      --pink: #ff4fa3;
+      --pink-soft: #2a1421;
+      --green: #79e5b0;
+      --green-soft: #10251e;
+      --amber: #ffc56b;
+      --amber-soft: #2a2114;
+      --red: #ff8096;
+      --blue: #8fb8ff;
+      --violet: #bba5ff;
+      --shadow: 0 24px 80px rgba(0,0,0,.38);
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: var(--sans);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; min-width: 920px; background: var(--bg); color: var(--text); }
+    body { overflow: hidden; }
+    button, input, select { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+    svg.icon { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+    .hidden-symbols { position: fixed; width: 0; height: 0; overflow: hidden; }
+
+    .prototype-banner { position: fixed; z-index: 90; top: 13px; left: 50%; transform: translateX(-50%); border: 1px solid #4c3851; border-radius: 999px; padding: 5px 10px; background: rgba(19,14,22,.88); color: #d8bdd0; backdrop-filter: blur(12px); font-size: 10px; font-weight: 760; letter-spacing: .1em; text-transform: uppercase; pointer-events: none; }
+    .prototype-switcher { position: fixed; z-index: 100; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 5px; padding: 5px; border-radius: 999px; background: #f5f6f8; color: #15171c; box-shadow: 0 14px 45px rgba(0,0,0,.5); }
+    .prototype-switcher button { width: 35px; height: 35px; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; font-size: 18px; }
+    .prototype-switcher button:hover { background: #e2e4e8; }
+    .prototype-switcher strong { width: 205px; text-align: center; font-size: 12px; }
+    .prototype-switcher .dots { display: flex; gap: 5px; justify-content: center; margin-top: 2px; }
+    .prototype-switcher .dot { width: 5px; height: 5px; border-radius: 50%; background: #a9adb6; }
+    .prototype-switcher .dot.active { width: 13px; border-radius: 6px; background: #21242b; }
+
+    .app { height: 100vh; display: grid; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 780; letter-spacing: -.025em; }
+    .brand-mark { width: 29px; height: 29px; border: 2px solid var(--pink); border-radius: 9px; display: grid; place-items: center; color: var(--pink); box-shadow: inset 0 0 0 4px rgba(255,79,163,.07); }
+    .brand-mark svg { width: 17px; height: 17px; }
+    .eyebrow { color: var(--pink); text-transform: uppercase; letter-spacing: .13em; font-size: 10px; font-weight: 800; }
+    h1 { margin: 5px 0 0; font-size: 28px; letter-spacing: -.04em; line-height: 1.1; }
+    h2 { margin: 0; font-size: 16px; letter-spacing: -.015em; }
+    p { margin: 0; }
+    .muted { color: var(--muted); }
+    .quiet { color: var(--quiet); }
+    .mono, .amount { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    .amount { text-align: right; font-weight: 650; }
+    .amount.credit { color: var(--green); }
+
+    .button { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--line); border-radius: 9px; padding: 0 13px; background: var(--panel-raised); color: var(--text); cursor: pointer; font-size: 13px; font-weight: 680; transition: transform .14s, border-color .14s, background .14s; }
+    .button:hover { transform: translateY(-1px); border-color: #424a59; background: #1a1f29; }
+    .button.primary { border-color: transparent; background: var(--pink); color: #2d071a; box-shadow: 0 7px 25px rgba(255,79,163,.18); }
+    .button.primary:hover { background: #ff69b0; }
+    .button.success { border-color: #28513f; background: var(--green-soft); color: var(--green); }
+    .button.icon-only { width: 36px; padding: 0; }
+    .button.quiet-button { background: transparent; color: var(--muted); }
+    .button:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+    .field { position: relative; display: flex; align-items: center; }
+    .field > svg { position: absolute; left: 11px; color: var(--quiet); pointer-events: none; }
+    .field input, .field select, select.filter { height: 36px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-soft); color: var(--text); padding: 0 11px; }
+    .field input { width: 100%; padding-left: 35px; }
+    .field input::placeholder { color: var(--quiet); }
+    select.filter { appearance: none; min-width: 150px; padding-right: 32px; background-image: linear-gradient(45deg,transparent 50%,#737d8c 50%),linear-gradient(135deg,#737d8c 50%,transparent 50%); background-position: calc(100% - 15px) 15px,calc(100% - 10px) 15px; background-size: 5px 5px,5px 5px; background-repeat: no-repeat; }
+    .filter-bar { display: flex; align-items: center; gap: 8px; }
+    .filter-bar .field { min-width: 250px; flex: 1; }
+    .filter-count { color: var(--quiet); font-size: 12px; white-space: nowrap; padding-left: 4px; }
+
+    .pill { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 0 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--quiet); }
+    .pill.ok { color: var(--green); border-color: #274b3c; background: rgba(121,229,176,.04); }
+    .pill.ok::before { background: var(--green); }
+    .pill.review { color: var(--amber); border-color: #514129; background: rgba(255,197,107,.04); }
+    .pill.review::before { background: var(--amber); }
+    .pill.excluded { color: var(--violet); border-color: #443b5b; }
+    .account { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .account-icon { width: 25px; height: 25px; border-radius: 7px; display: grid; place-items: center; background: #17212b; color: var(--blue); }
+    .account-icon.joint { color: var(--violet); background: #201b30; }
+    .account-icon.card { color: var(--pink); background: var(--pink-soft); }
+    .account-icon svg { width: 14px; height: 14px; }
+    .merchant { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .merchant-icon { width: 31px; height: 31px; flex: 0 0 auto; border-radius: 9px; display: grid; place-items: center; background: #1a202a; color: #b4bdca; font-weight: 780; font-size: 11px; }
+    .merchant-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 670; }
+    .merchant-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--quiet); font-size: 11px; margin-top: 3px; }
+
+    .ledger-frame { border: 1px solid var(--line); border-radius: 13px; background: var(--panel); overflow: hidden; }
+    .ledger { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .ledger th { height: 38px; padding: 0 12px; border-bottom: 1px solid var(--line); background: #0c0f15; color: var(--quiet); text-align: left; text-transform: uppercase; letter-spacing: .09em; font-size: 9px; font-weight: 800; }
+    .ledger th.right { text-align: right; }
+    .ledger td { height: 53px; padding: 0 12px; border-bottom: 1px solid var(--line-soft); color: #cfd4dd; font-size: 12px; vertical-align: middle; }
+    .ledger tbody tr { cursor: pointer; transition: background .12s; }
+    .ledger tbody tr:hover { background: rgba(255,255,255,.025); }
+    .ledger tbody tr.selected { background: #241521; box-shadow: inset 3px 0 var(--pink); }
+    .ledger tbody tr:last-child td { border-bottom: 0; }
+    .ledger .date { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+    .ledger-empty { padding: 60px 20px; text-align: center; color: var(--muted); }
+    .category-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .category-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--category-colour, var(--blue)); flex: 0 0 auto; }
+    .category-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .summary-list { display: grid; gap: 3px; }
+    .summary-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line-soft); }
+    .summary-row:last-child { border-bottom: 0; }
+    .summary-row .label { color: var(--muted); font-size: 12px; }
+    .summary-row strong { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .progress-track { height: 6px; background: #242a34; border-radius: 8px; overflow: hidden; }
+    .progress-track span { display: block; height: 100%; width: var(--progress); border-radius: inherit; background: var(--pink); }
+
+    .detail-content { display: grid; gap: 17px; }
+    .detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+    .detail-head h2 { margin-top: 5px; font-size: 19px; }
+    .detail-amount { font-family: var(--mono); font-size: 19px; font-weight: 750; }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .detail-field { min-width: 0; }
+    .detail-label { margin-bottom: 5px; color: var(--quiet); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; }
+    .detail-value { color: #d8dce3; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+    .detail-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+
+    .toast { position: fixed; z-index: 120; top: 70px; left: 50%; transform: translate(-50%,-15px); opacity: 0; border: 1px solid #385d4c; border-radius: 10px; padding: 10px 14px; background: #e4fff2; color: #153225; box-shadow: var(--shadow); font-size: 12px; font-weight: 700; pointer-events: none; transition: .2s; }
+    .toast.show { opacity: 1; transform: translate(-50%,0); }
+
+    /* A — finance workbench: persistent stage rail, ledger canvas, contextual plan. */
+    body[data-variant="a"] .app { grid-template-columns: 218px minmax(650px,1fr) 288px; grid-template-rows: 62px 1fr; }
+    .a-topbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 20px; padding: 0 20px; border-bottom: 1px solid var(--line); background: rgba(9,11,16,.94); backdrop-filter: blur(18px); }
+    .a-topbar .brand { width: 178px; }
+    .a-breadcrumb { flex: 1; color: var(--muted); font-size: 12px; }
+    .a-breadcrumb strong { color: var(--text); }
+    .a-actions { display: flex; gap: 8px; }
+    .a-sidebar { grid-column: 1; grid-row: 2; border-right: 1px solid var(--line); background: #0c0f15; padding: 20px 11px 90px; overflow: auto; }
+    .stage-label { padding: 0 10px 10px; color: var(--quiet); font-size: 9px; text-transform: uppercase; letter-spacing: .14em; font-weight: 800; }
+    .stages { display: grid; gap: 4px; }
+    .stage { width: 100%; display: grid; grid-template-columns: 29px 1fr auto; align-items: center; gap: 8px; border: 0; border-radius: 9px; padding: 9px 10px; background: transparent; color: var(--muted); text-align: left; cursor: pointer; }
+    .stage:hover { background: var(--panel); color: var(--text); }
+    .stage.active { background: var(--pink-soft); color: var(--pink); }
+    .stage-number { width: 23px; height: 23px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 7px; font-size: 10px; font-weight: 800; }
+    .stage.done .stage-number { border-color: #28513f; background: var(--green-soft); color: var(--green); }
+    .stage-count { color: var(--quiet); font: 10px var(--mono); }
+    .a-sidebar-card { margin: 28px 5px 0; padding: 14px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel); }
+    .a-sidebar-card strong { display: block; margin: 6px 0 4px; font-size: 12px; }
+    .a-sidebar-card p { color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .a-main { grid-column: 2; grid-row: 2; overflow: auto; padding: 27px 26px 90px; }
+    .a-page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 22px; }
+    .a-page-head p { margin-top: 7px; color: var(--muted); font-size: 12px; }
+    .a-page-head .page-total { text-align: right; }
+    .page-total strong { display: block; font: 750 22px var(--mono); }
+    .page-total span { color: var(--muted); font-size: 10px; }
+    .a-main .filter-bar { margin-bottom: 11px; }
+    .a-inspector { grid-column: 3; grid-row: 2; border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 22px 20px 90px; }
+    .a-inspector section { padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
+    .a-inspector section:last-child { border: 0; }
+    .section-kicker { color: var(--quiet); font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 10px; }
+    .health { display: flex; align-items: center; gap: 10px; padding: 11px; border: 1px solid #2b4c3d; border-radius: 10px; background: var(--green-soft); color: var(--green); }
+    .health svg { width: 20px; height: 20px; }
+    .health strong { display: block; font-size: 12px; }
+    .health span { color: #81aa96; font-size: 10px; }
+
+    /* B — power ledger: full-width spreadsheet, command bar, slide-up detail strip. */
+    body[data-variant="b"] { --bg: #070c11; --panel: #0b1218; --panel-raised: #111b24; --panel-soft: #081016; --line: #20303b; --line-soft: #152630; }
+    body[data-variant="b"] .app { grid-template-rows: 52px 48px 1fr 135px; font-family: var(--mono); }
+    .b-topbar { grid-row: 1; display: grid; grid-template-columns: 190px 1fr auto; align-items: center; padding: 0 17px; border-bottom: 1px solid var(--line); background: #080e13; }
+    .b-topbar .brand { font-family: var(--sans); }
+    .b-command { max-width: 520px; justify-self: center; width: 100%; }
+    .b-command input { height: 32px; border-radius: 6px; background: #0d171f; font-family: var(--mono); font-size: 11px; }
+    .key { border: 1px solid #334550; border-radius: 4px; padding: 2px 5px; color: var(--quiet); background: #101921; font-size: 9px; }
+    .b-status { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 10px; }
+    .b-status .live { color: var(--green); }
+    .b-toolbar { grid-row: 2; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-bottom: 1px solid var(--line); background: #0b131a; }
+    .b-tabs { display: flex; height: 100%; }
+    .b-tab { border: 0; border-bottom: 2px solid transparent; padding: 0 14px; background: transparent; color: var(--muted); cursor: pointer; font: 650 10px var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+    .b-tab.active { border-bottom-color: var(--pink); color: var(--text); }
+    .b-toolbar .filter-bar { flex: 1; }
+    .b-toolbar .field { min-width: 190px; }
+    .b-toolbar select.filter { min-width: 130px; height: 32px; border-radius: 5px; font: 10px var(--mono); }
+    .b-stage { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    .b-stage span { color: var(--quiet); font-size: 9px; }
+    .b-stage strong { color: var(--pink); font-size: 10px; }
+    .b-main { grid-row: 3; overflow: auto; padding: 13px 14px 0; }
+    .b-main .ledger-frame { border-radius: 5px 5px 0 0; }
+    body[data-variant="b"] .ledger th { height: 32px; background: #091117; font: 800 9px var(--mono); }
+    body[data-variant="b"] .ledger td { height: 42px; font: 11px var(--mono); }
+    body[data-variant="b"] .merchant-icon { width: 24px; height: 24px; border-radius: 5px; font-size: 9px; }
+    body[data-variant="b"] .merchant-name { font: 650 11px var(--mono); }
+    body[data-variant="b"] .merchant-note { display: none; }
+    body[data-variant="b"] .account-icon { width: 21px; height: 21px; border-radius: 4px; }
+    body[data-variant="b"] .pill { border-radius: 4px; font-size: 9px; }
+    .b-details { grid-row: 4; display: grid; grid-template-columns: 1.35fr 1fr 1fr auto; align-items: center; gap: 28px; padding: 15px 20px 52px; border-top: 1px solid #34444f; background: #0c141b; box-shadow: 0 -14px 35px rgba(0,0,0,.18); }
+    .b-detail-main { display: flex; align-items: center; gap: 13px; min-width: 0; }
+    .b-detail-main .merchant-icon { width: 38px; height: 38px; border-radius: 7px; }
+    .b-detail-main h2 { font: 700 13px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .b-detail-main p { margin-top: 4px; color: var(--quiet); font-size: 9px; }
+    .b-detail-group .detail-label { font-family: var(--mono); }
+    .b-detail-group .detail-value { font: 11px var(--mono); }
+    .b-actions { display: flex; gap: 6px; }
+    body[data-variant="b"] .button { min-height: 31px; border-radius: 5px; font: 650 10px var(--mono); }
+
+    /* C — review desk: progressive flow, framed inbox, always-visible reconciliation plan. */
+    body[data-variant="c"] { --bg: #0d0c11; --panel: #15131a; --panel-raised: #1c1922; --panel-soft: #100e14; --line: #322d39; --line-soft: #26212c; }
+    body[data-variant="c"] .app { grid-template-columns: minmax(680px,1fr) 350px; grid-template-rows: 74px 72px 1fr; }
+    .c-topbar { grid-column: 1 / -1; grid-row: 1; display: flex; align-items: center; gap: 24px; padding: 0 25px; border-bottom: 1px solid var(--line); background: #0e0c12; }
+    .c-topbar .brand { width: 180px; }
+    .c-steps { display: flex; align-items: center; gap: 0; flex: 1; max-width: 680px; }
+    .c-step { display: flex; align-items: center; gap: 7px; color: var(--quiet); font-size: 11px; font-weight: 670; }
+    .c-step::after { content: ""; width: clamp(18px,4vw,58px); height: 1px; margin: 0 9px; background: var(--line); }
+    .c-step:last-child::after { display: none; }
+    .c-step-index { width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; font-size: 9px; }
+    .c-step.done { color: var(--green); }
+    .c-step.done .c-step-index { border-color: #315743; background: var(--green-soft); }
+    .c-step.active { color: var(--pink); }
+    .c-step.active .c-step-index { border-color: var(--pink); background: var(--pink-soft); }
+    .c-top-actions { margin-left: auto; display: flex; gap: 8px; }
+    .c-summary { grid-column: 1 / -1; grid-row: 2; display: grid; grid-template-columns: repeat(4,1fr); border-bottom: 1px solid var(--line); background: #121017; }
+    .c-metric { display: flex; align-items: center; gap: 12px; padding: 0 24px; border-right: 1px solid var(--line); }
+    .c-metric:last-child { border: 0; }
+    .c-metric-icon { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 10px; color: var(--muted); background: var(--panel); }
+    .c-metric strong { display: block; font: 720 15px var(--mono); }
+    .c-metric span { color: var(--quiet); font-size: 10px; }
+    .c-main { grid-column: 1; grid-row: 3; overflow: auto; padding: 23px 24px 90px; }
+    .c-section-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 15px; }
+    .c-section-head p { margin-top: 6px; color: var(--muted); font-size: 11px; }
+    .c-main .filter-bar { margin-bottom: 12px; padding: 11px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+    .c-main .ledger-frame { border-radius: 12px; }
+    .c-plan { grid-column: 2; grid-row: 3; overflow: auto; border-left: 1px solid var(--line); background: #121017; padding: 23px 21px 90px; }
+    .plan-card { margin-bottom: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+    .plan-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 13px; }
+    .plan-card-head h2 { font-size: 13px; }
+    .transfer { display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 9px; padding: 10px 0; border-top: 1px solid var(--line-soft); }
+    .transfer:first-of-type { border-top: 0; }
+    .transfer-icon { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; background: var(--pink-soft); color: var(--pink); }
+    .transfer strong { display: block; font-size: 11px; }
+    .transfer span { color: var(--quiet); font-size: 9px; }
+    .transfer .amount { color: var(--text); font-size: 11px; }
+
+    @media (max-width: 1200px) {
+      body[data-variant="a"] .app { grid-template-columns: 170px minmax(500px,1fr) 250px; }
+      .a-topbar .brand { width: 130px; }
+      .a-main { padding-left: 14px; padding-right: 14px; }
+      .filter-bar { flex-wrap: wrap; }
+      .filter-bar .field { min-width: 180px; }
+      .filter-bar select.filter { min-width: 112px; flex: 1; }
+      body[data-variant="a"] .ledger th:nth-child(1) { width: 58px !important; }
+      body[data-variant="a"] .ledger th:nth-child(3) { width: 108px !important; }
+      body[data-variant="a"] .ledger th:nth-child(4) { width: 115px !important; }
+      body[data-variant="a"] .ledger th:nth-child(5) { width: 78px !important; }
+      body[data-variant="a"] .ledger th:nth-child(6) { width: 80px !important; }
+      body[data-variant="a"] .merchant-note { display: none; }
+      body[data-variant="a"] .ledger td, body[data-variant="a"] .ledger th { padding-left: 8px; padding-right: 8px; }
+      body[data-variant="c"] .app { grid-template-columns: minmax(610px,1fr) 310px; }
+      body[data-variant="c"] .ledger th:nth-child(1) { width: 58px !important; }
+      body[data-variant="c"] .ledger th:nth-child(3) { width: 108px !important; }
+      body[data-variant="c"] .ledger th:nth-child(4) { width: 120px !important; }
+      body[data-variant="c"] .ledger th:nth-child(5) { width: 78px !important; }
+      body[data-variant="c"] .ledger th:nth-child(6) { width: 80px !important; }
+      body[data-variant="c"] .merchant-note { display: none; }
+      body[data-variant="c"] .ledger td, body[data-variant="c"] .ledger th { padding-left: 8px; padding-right: 8px; }
+      .c-step span:last-child { display: none; }
+    }
+  </style>
+</head>
+<body data-variant="a">
+  <svg class="hidden-symbols" aria-hidden="true">
+    <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M4 6.5h13.5A2.5 2.5 0 0 1 20 9v9H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12"/><path d="M15 11h5v4h-5a2 2 0 0 1 0-4Z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v5h14v-5"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 4h12l2 2v14H5z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/></symbol>
+    <symbol id="i-bank" viewBox="0 0 24 24"><path d="m3 9 9-5 9 5M5 10v7m4-7v7m6-7v7m4-7v7M3 20h18"/></symbol>
+    <symbol id="i-card" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h3"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.5-4 2.3-6 5.5-6s5 2 5.5 6"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14c3.2-.4 5 1.3 5.5 4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 3.5 19h17zM12 9v4m0 3h.01"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="m4 16-.5 4.5L8 20l11-11-4-4zM13.5 6.5l4 4"/></symbol>
+    <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10m-7 6h4"/></symbol>
+    <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6m-6 4h6m-6 4h3"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2-5.3L4 9"/><path d="M4 4v5h5m3-2v5l3 2"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10m4 0h2M4 17h3m4 0h9M14 4v6M7 14v6"/></symbol>
+    <symbol id="i-coffee" viewBox="0 0 24 24"><path d="M5 8h12v7a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5zM17 10h2a2 2 0 0 1 0 4h-2M8 4v2m4-2v2"/></symbol>
+    <symbol id="i-cart" viewBox="0 0 24 24"><path d="M3 4h2l2 11h10l3-8H6m3 12h.01M17 19h.01"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 11 9-7 9 7v9h-6v-6H9v6H3z"/></symbol>
+    <symbol id="i-train" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="15" rx="3"/><path d="M8 21l2-3m6 3-2-3M5 11h14M9 7h.01M15 7h.01"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/></symbol>
+  </svg>
+
+  <div class="prototype-banner">Throwaway UI prototype · synthetic data</div>
+  <div class="app" id="app"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="prototype-switcher" aria-label="Prototype variant switcher">
+    <button id="previousVariant" aria-label="Previous design direction">←</button>
+    <div><strong id="variantLabel">A — Finance Workbench</strong><div class="dots" id="variantDots"></div></div>
+    <button id="nextVariant" aria-label="Next design direction">→</button>
+  </div>
+
+  <script>
+    const transactions = [
+      { id:"TX-1001", date:"23 Sep", merchant:"Waitrose", note:"Weekly shop", initial:"W", icon:"cart", amount:-86.42, account:"Credit card", category:"Groceries", subcategory:"Food", status:"Ready" },
+      { id:"TX-1002", date:"22 Sep", merchant:"Great Western", note:"London return", initial:"GW", icon:"train", amount:-54.80, account:"Credit card", category:"Transport", subcategory:"Rail", status:"Ready" },
+      { id:"TX-1003", date:"22 Sep", merchant:"Waterstones", note:"Needs a category", initial:"W", icon:"receipt", amount:-24.99, account:"Credit card", category:"Uncategorised", subcategory:"—", status:"Review" },
+      { id:"TX-1004", date:"21 Sep", merchant:"Joint energy bill", note:"Paid from Personal", initial:"JE", icon:"home", amount:-60.00, account:"Personal", category:"Joint bills", subcategory:"Energy", status:"Review" },
+      { id:"TX-1005", date:"20 Sep", merchant:"The Coffee House", note:"City centre", initial:"CH", icon:"coffee", amount:-4.65, account:"Credit card", category:"Personal", subcategory:"Eating out", status:"Ready" },
+      { id:"TX-1006", date:"19 Sep", merchant:"Holiday refund", note:"Rail cancellation", initial:"HR", icon:"train", amount:38.50, account:"Credit card", category:"Holidays", subcategory:"Travel", status:"Ready" },
+      { id:"TX-1007", date:"18 Sep", merchant:"Sainsbury’s", note:"Household shop", initial:"S", icon:"cart", amount:-72.18, account:"Credit card", category:"Groceries", subcategory:"Food", status:"Ready" },
+      { id:"TX-1008", date:"17 Sep", merchant:"Card repayment", note:"Excluded from spending", initial:"CR", icon:"card", amount:325.00, account:"Credit card", category:"Transfers", subcategory:"Repayment", status:"Excluded" },
+      { id:"TX-1009", date:"16 Sep", merchant:"British Gas", note:"Monthly direct debit", initial:"BG", icon:"home", amount:-112.34, account:"Joint", category:"Joint bills", subcategory:"Utilities", status:"Ready" },
+      { id:"TX-1010", date:"15 Sep", merchant:"National Trust", note:"Annual membership", initial:"NT", icon:"spark", amount:-84.00, account:"Personal", category:"Personal", subcategory:"Memberships", status:"Ready" },
+      { id:"TX-1011", date:"14 Sep", merchant:"Eurostar", note:"Paris break", initial:"EU", icon:"train", amount:-146.20, account:"Credit card", category:"Holidays", subcategory:"Travel", status:"Ready" },
+      { id:"TX-1012", date:"13 Sep", merchant:"Waitrose", note:"Possible duplicate", initial:"W", icon:"cart", amount:-86.42, account:"Credit card", category:"Groceries", subcategory:"Food", status:"Review" }
+    ];
+
+    const variants = [
+      { key:"a", label:"A — Finance Workbench" },
+      { key:"b", label:"B — Power Ledger" },
+      { key:"c", label:"C — Review Desk" }
+    ];
+    const categoryColours = { Groceries:"#79e5b0", Transport:"#8fb8ff", Uncategorised:"#ffc56b", "Joint bills":"#bba5ff", Personal:"#ff98c9", Holidays:"#61d5e6", Transfers:"#949cab" };
+    const accountIcons = { "Credit card":"card", Personal:"bank", Joint:"users" };
+    const state = { search:"", account:"All accounts", category:"All categories", status:"All statuses", selected:"TX-1003" };
+
+    function icon(name) { return `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`; }
+    function money(value) { return `${value < 0 ? "−" : "+"}£${Math.abs(value).toFixed(2)}`; }
+    function accountClass(account) { return account === "Joint" ? "joint" : account === "Credit card" ? "card" : ""; }
+    function currentVariant() {
+      const requested = new URLSearchParams(location.search).get("variant")?.toLowerCase();
+      return variants.some(v => v.key === requested) ? requested : "a";
+    }
+    function filteredTransactions() {
+      const query = state.search.trim().toLowerCase();
+      return transactions.filter(t =>
+        (!query || `${t.merchant} ${t.note} ${t.id} ${t.category} ${t.subcategory}`.toLowerCase().includes(query)) &&
+        (state.account === "All accounts" || t.account === state.account) &&
+        (state.category === "All categories" || t.category === state.category) &&
+        (state.status === "All statuses" || t.status === state.status));
+    }
+    function selectedTransaction() { return transactions.find(t => t.id === state.selected) ?? transactions[0]; }
+    function optionList(values, selected) { return values.map(value => `<option${value === selected ? " selected" : ""}>${value}</option>`).join(""); }
+    function filters({ search = true } = {}) {
+      return `<div class="filter-bar">
+        ${search ? `<label class="field">${icon("search")}<input data-filter="search" value="${state.search}" placeholder="Search merchant, note or ID"></label>` : ""}
+        <select class="filter" data-filter="account" aria-label="Filter by account">${optionList(["All accounts","Credit card","Personal","Joint"], state.account)}</select>
+        <select class="filter" data-filter="category" aria-label="Filter by category">${optionList(["All categories","Groceries","Transport","Joint bills","Personal","Holidays","Uncategorised","Transfers"], state.category)}</select>
+        <select class="filter" data-filter="status" aria-label="Filter by status">${optionList(["All statuses","Ready","Review","Excluded"], state.status)}</select>
+        <span class="filter-count">${filteredTransactions().length} of ${transactions.length}</span>
+      </div>`;
+    }
+    function statusPill(status) { return `<span class="pill ${status === "Ready" ? "ok" : status === "Review" ? "review" : "excluded"}">${status}</span>`; }
+    function ledger(extraClass = "") {
+      const rows = filteredTransactions();
+      if (!rows.length) return `<div class="ledger-frame ${extraClass}"><div class="ledger-empty">${icon("filter")}<p style="margin-top:10px">No transactions match these filters.</p></div></div>`;
+      return `<div class="ledger-frame ${extraClass}"><table class="ledger">
+        <thead><tr><th style="width:72px">Date</th><th>Transaction</th><th style="width:145px">Account</th><th style="width:150px">Category</th><th style="width:92px">Status</th><th class="right" style="width:98px">Amount</th></tr></thead>
+        <tbody>${rows.map(t => `<tr data-transaction="${t.id}" class="${state.selected === t.id ? "selected" : ""}" tabindex="0">
+          <td class="date">${t.date}</td>
+          <td><div class="merchant"><span class="merchant-icon">${t.icon ? icon(t.icon) : t.initial}</span><div style="min-width:0"><div class="merchant-name">${t.merchant}</div><div class="merchant-note">${t.note} · ${t.id}</div></div></div></td>
+          <td><div class="account"><span class="account-icon ${accountClass(t.account)}">${icon(accountIcons[t.account])}</span><span>${t.account}</span></div></td>
+          <td><div class="category-cell" style="--category-colour:${categoryColours[t.category]}"><span class="category-dot"></span><span class="category-name">${t.category}<span class="quiet"> / ${t.subcategory}</span></span></div></td>
+          <td>${statusPill(t.status)}</td>
+          <td class="amount ${t.amount > 0 ? "credit" : ""}">${money(t.amount)}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>`;
+    }
+    function details(compact = false) {
+      const t = selectedTransaction();
+      if (compact) return `<div class="b-detail-main"><span class="merchant-icon">${icon(t.icon)}</span><div style="min-width:0"><h2>${t.merchant}</h2><p>${t.id} · ${t.date} · ${t.note}</p></div></div>
+        <div class="b-detail-group"><div class="detail-label">Classification</div><div class="detail-value">${t.category} / ${t.subcategory}</div></div>
+        <div class="b-detail-group"><div class="detail-label">Funding & amount</div><div class="detail-value">${t.account} · <strong class="${t.amount > 0 ? "credit" : ""}">${money(t.amount)}</strong></div></div>
+        <div class="b-actions"><button class="button" data-action="edit">${icon("edit")} Edit row</button><button class="button primary" data-action="accept">${icon("check")} Accept</button></div>`;
+      return `<div class="detail-content">
+        <div class="detail-head"><div><div class="eyebrow">Selected transaction</div><h2>${t.merchant}</h2></div><strong class="detail-amount ${t.amount > 0 ? "credit" : ""}">${money(t.amount)}</strong></div>
+        <div>${statusPill(t.status)}</div>
+        <div class="detail-grid">
+          <div class="detail-field"><div class="detail-label">Account</div><div class="detail-value">${t.account}</div></div>
+          <div class="detail-field"><div class="detail-label">Date</div><div class="detail-value mono">${t.date} 2026</div></div>
+          <div class="detail-field"><div class="detail-label">Category</div><div class="detail-value">${t.category}</div></div>
+          <div class="detail-field"><div class="detail-label">Subcategory</div><div class="detail-value">${t.subcategory}</div></div>
+        </div>
+        <div class="detail-field"><div class="detail-label">Import note</div><div class="detail-value">${t.note}</div></div>
+        <div class="detail-actions"><button class="button" data-action="edit">${icon("edit")} Edit</button><button class="button primary" data-action="accept">${icon("check")} Accept</button></div>
+      </div>`;
+    }
+    function brand() { return `<div class="brand"><span class="brand-mark">${icon("wallet")}</span><span>dot-finance</span></div>`; }
+
+    function renderA() {
+      return `<header class="a-topbar">${brand()}<div class="a-breadcrumb"><strong>September reconciliation</strong> <span class="quiet">/ Review</span></div><div class="a-actions"><button class="button quiet-button" data-action="save">${icon("save")} Save draft</button><button class="button primary" data-action="continue">Continue ${icon("arrow")}</button></div></header>
+        <aside class="a-sidebar"><div class="stage-label">Reconciliation</div><nav class="stages">
+          <button class="stage done"><span class="stage-number">${icon("check")}</span><span>Import</span><span class="stage-count">3</span></button>
+          <button class="stage active"><span class="stage-number">2</span><span>Review</span><span class="stage-count">12</span></button>
+          <button class="stage"><span class="stage-number">3</span><span>Transfers</span><span class="stage-count">4</span></button>
+          <button class="stage"><span class="stage-number">4</span><span>Confirm</span></button>
+          <button class="stage"><span class="stage-number">5</span><span>History</span></button>
+        </nav><div class="a-sidebar-card"><div class="eyebrow">This session</div><strong>2 items need review</strong><p>One uncategorised purchase and one possible duplicate.</p></div></aside>
+        <main class="a-main"><div class="a-page-head"><div><div class="eyebrow">Step 2 of 4</div><h1>Review transactions</h1><p>Check classifications before calculating the transfer plan.</p></div><div class="page-total"><strong>£693.50</strong><span>net imported spending</span></div></div>${filters()}${ledger()}</main>
+        <aside class="a-inspector"><section><div class="section-kicker">Review progress</div><div class="health">${icon("check")}<div><strong>10 of 12 ready</strong><span>Two decisions remaining</span></div></div><div style="margin-top:12px" class="progress-track"><span style="--progress:83%"></span></div></section><section>${details()}</section><section><div class="section-kicker">Running totals</div><div class="summary-list"><div class="summary-row"><span class="label">Groceries</span><strong>£245.02</strong></div><div class="summary-row"><span class="label">Joint bills</span><strong>£172.34</strong></div><div class="summary-row"><span class="label">Holidays</span><strong>£107.70</strong></div><div class="summary-row"><span class="label">Personal</span><strong>£88.65</strong></div></div></section></aside>`;
+    }
+    function renderB() {
+      return `<header class="b-topbar">${brand()}<label class="field b-command">${icon("search")}<input data-filter="search" value="${state.search}" placeholder="Search transactions or type a command…"><span style="position:absolute;right:9px" class="key">⌘ K</span></label><div class="b-status"><span class="live">● SAVED</span><span>SEP 2026</span><button class="button icon-only" data-action="more">${icon("more")}</button></div></header>
+        <nav class="b-toolbar"><div class="b-tabs"><button class="b-tab">Import</button><button class="b-tab active">Ledger <span class="quiet">12</span></button><button class="b-tab">Plan <span class="quiet">4</span></button><button class="b-tab">History</button></div>${filters({search:false})}<div class="b-stage"><span>REVIEW</span><strong>2 OPEN</strong><button class="button primary" data-action="continue">CALCULATE PLAN ${icon("arrow")}</button></div></nav>
+        <main class="b-main">${ledger()}</main><aside class="b-details">${details(true)}</aside>`;
+    }
+    function renderC() {
+      return `<header class="c-topbar">${brand()}<nav class="c-steps"><div class="c-step done"><span class="c-step-index">${icon("check")}</span><span>Import</span></div><div class="c-step active"><span class="c-step-index">2</span><span>Review</span></div><div class="c-step"><span class="c-step-index">3</span><span>Transfers</span></div><div class="c-step"><span class="c-step-index">4</span><span>Confirm</span></div></nav><div class="c-top-actions"><button class="button quiet-button" data-action="save">${icon("save")}</button><button class="button primary" data-action="continue">Review 2 items ${icon("arrow")}</button></div></header>
+        <section class="c-summary"><div class="c-metric"><span class="c-metric-icon">${icon("receipt")}</span><div><strong>12</strong><span>Imported transactions</span></div></div><div class="c-metric"><span class="c-metric-icon">${icon("alert")}</span><div><strong style="color:var(--amber)">2</strong><span>Need your attention</span></div></div><div class="c-metric"><span class="c-metric-icon">${icon("card")}</span><div><strong>£693.50</strong><span>Net spending</span></div></div><div class="c-metric"><span class="c-metric-icon">${icon("arrow")}</span><div><strong>4</strong><span>Projected transfers</span></div></div></section>
+        <main class="c-main"><div class="c-section-head"><div><div class="eyebrow">Transaction inbox</div><h1>Make the exceptions clear</h1><p>Filter the ledger, inspect a row, then accept only the changes you trust.</p></div><button class="button" data-action="rules">${icon("sliders")} Category rules</button></div>${filters()}${ledger()}</main>
+        <aside class="c-plan"><div class="section-kicker">Reconciliation plan</div><div class="plan-card"><div class="plan-card-head"><h2>Projected transfers</h2><span class="pill review">Preview</span></div><div class="transfer"><span class="transfer-icon">${icon("arrow")}</span><div><strong>Personal → Joint</strong><span>Household share</span></div><span class="amount">£232.34</span></div><div class="transfer"><span class="transfer-icon">${icon("arrow")}</span><div><strong>Savings → Personal</strong><span>Personal spend</span></div><span class="amount">£188.65</span></div><div class="transfer"><span class="transfer-icon">${icon("arrow")}</span><div><strong>Joint → Card</strong><span>Card settlement</span></div><span class="amount">£325.00</span></div></div><div class="plan-card">${details()}</div><div class="plan-card"><div class="plan-card-head"><h2>Plan health</h2><span class="pill ok">Balanced</span></div><p class="muted" style="font-size:11px;line-height:1.55">The draft plan leaves every protected account above its target.</p></div></aside>`;
+    }
+
+    function render() {
+      const variant = currentVariant();
+      document.body.dataset.variant = variant;
+      document.getElementById("app").innerHTML = variant === "a" ? renderA() : variant === "b" ? renderB() : renderC();
+      const selectedVariant = variants.find(v => v.key === variant);
+      document.getElementById("variantLabel").textContent = selectedVariant.label;
+      document.getElementById("variantDots").innerHTML = variants.map(v => `<span class="dot ${v.key === variant ? "active" : ""}"></span>`).join("");
+      bindControls();
+    }
+    function bindControls() {
+      document.querySelectorAll("[data-filter]").forEach(control => {
+        const event = control.tagName === "INPUT" ? "input" : "change";
+        control.addEventListener(event, () => {
+          state[control.dataset.filter] = control.value;
+          const visible = filteredTransactions();
+          if (visible.length && !visible.some(transaction => transaction.id === state.selected)) state.selected = visible[0].id;
+          render();
+          if (control.tagName === "INPUT") {
+            const replacement = document.querySelector(`[data-filter="${control.dataset.filter}"]`);
+            replacement.focus(); replacement.setSelectionRange(replacement.value.length, replacement.value.length);
+          }
+        });
+      });
+      document.querySelectorAll("[data-transaction]").forEach(row => {
+        const select = () => { state.selected = row.dataset.transaction; render(); };
+        row.addEventListener("click", select);
+        row.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") select(); });
+      });
+      document.querySelectorAll("[data-action]").forEach(button => button.addEventListener("click", () => {
+        const messages = { save:"Draft saved locally", continue:"Prototype only — next-stage navigation noted", edit:"Edit affordance selected", accept:"Transaction marked ready for this preview", more:"More actions would open here", rules:"Category rules would open here" };
+        showToast(messages[button.dataset.action] ?? "Interaction noted");
+      }));
+    }
+    function showToast(message) {
+      const toast = document.getElementById("toast"); toast.textContent = message; toast.classList.add("show");
+      clearTimeout(showToast.timer); showToast.timer = setTimeout(() => toast.classList.remove("show"), 1900);
+    }
+    function cycle(delta) {
+      const index = variants.findIndex(v => v.key === currentVariant());
+      const next = variants[(index + delta + variants.length) % variants.length];
+      const url = new URL(location.href); url.searchParams.set("variant", next.key); history.replaceState(null, "", url); render();
+    }
+    document.getElementById("previousVariant").addEventListener("click", () => cycle(-1));
+    document.getElementById("nextVariant").addEventListener("click", () => cycle(1));
+    addEventListener("keydown", event => {
+      if (["INPUT","SELECT","TEXTAREA"].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable) return;
+      if (event.key === "ArrowLeft") cycle(-1);
+      if (event.key === "ArrowRight") cycle(1);
+    });
+    addEventListener("popstate", render);
+    render();
+  </script>
+</body>
+</html>
