@@ -72,7 +72,8 @@ public sealed record ReconciliationDraft(
     IReadOnlyList<Transfer> Transfers,
     bool IsLocked,
     bool IsSettled,
-    decimal Discrepancy);
+    decimal Discrepancy,
+    bool DiscrepancyAcknowledged = false);
 
 /// <summary>The full persistence shape for the guided workflow experiment.</summary>
 public sealed record ScenarioState(
@@ -81,6 +82,8 @@ public sealed record ScenarioState(
     IReadOnlyList<SubcategoryRule> SubcategoryRules,
     IReadOnlyList<ReportingCategory> ReportingCategories,
     IReadOnlyList<Transaction> Transactions,
+    IReadOnlyList<Transaction> PendingTransactions,
+    IReadOnlyDictionary<string, FundingSource> Overrides,
     ReconciliationDraft? Draft,
     IReadOnlyList<ReconciliationDraft> CompletedReconciliations,
     string ThemePreference);

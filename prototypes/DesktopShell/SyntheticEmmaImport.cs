@@ -11,8 +11,8 @@ public static class SyntheticEmmaImport
     {
         using StreamReader reader = File.OpenText(path);
         using CsvReader csv = new(reader, CultureInfo.InvariantCulture);
-        List<EmmaRow> rows = csv.GetRecords<EmmaRow>().ToList();
-        List<PrototypeTransaction> transactions = rows.Select((row, index) => new PrototypeTransaction(
+        List<EmmaRow> rows = [.. csv.GetRecords<EmmaRow>()];
+        List<PrototypeTransaction> transactions = [.. rows.Select((row, index) => new PrototypeTransaction(
             row.Id,
             DateOnly.ParseExact(row.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture),
             decimal.Parse(row.Amount, NumberStyles.Number | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture),
@@ -30,7 +30,7 @@ public static class SyntheticEmmaImport
             row.Notes,
             row.LinkedTransactionId,
             index == 0 ? "Joint" : "Personal",
-            index != 0)).ToList();
+            index != 0))];
 
         return new PrototypeState
         {

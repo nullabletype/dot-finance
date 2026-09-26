@@ -76,22 +76,13 @@ public static class ReconciliationEngine
         List<Transaction> result = new(transactions.Count);
         foreach (Transaction transaction in transactions)
         {
-            FundingSource? source;
-            if (IsExcluded(transaction))
-            {
-                source = null;
-            }
-            else if (IsRefund(transaction)
+            FundingSource? source = IsExcluded(transaction)
+                ? null
+                : IsRefund(transaction)
                 && transaction.LinkedTransactionId is { Length: > 0 } linked
-                && sourceById.TryGetValue(linked, out FundingSource original))
-            {
-                source = original;
-            }
-            else
-            {
-                source = ResolveSource(transaction, categoryRules, subcategoryRules, overrides);
-            }
-
+                && sourceById.TryGetValue(linked, out FundingSource original)
+                    ? original
+                    : ResolveSource(transaction, categoryRules, subcategoryRules, overrides);
             bool requiresReview = source is null && !IsExcluded(transaction);
             result.Add(transaction with { FundingSource = source, RequiresReview = requiresReview });
         }
@@ -115,10 +106,9 @@ public static class ReconciliationEngine
         Account primary = RequireRole(accounts, AccountRole.PrimaryPersonal);
         Account joint = RequireRole(accounts, AccountRole.Joint);
         Account sharedSavings = RequireRole(accounts, AccountRole.SharedSavings);
-        List<Account> savings = accounts
+        List<Account> savings = [.. accounts
             .Where(account => account.Role == AccountRole.PersonalSavings)
-            .OrderBy(account => account.Name, StringComparer.Ordinal)
-            .ToList();
+            .OrderBy(account => account.Name, StringComparer.Ordinal)];
 
         SourceContribution jointContribution = ComputeContribution(allocated, cardAccountName, FundingSource.Joint);
         SourceContribution sharedContribution = ComputeContribution(allocated, cardAccountName, FundingSource.SharedSavings);
@@ -184,7 +174,7 @@ public static class ReconciliationEngine
             shortfalls.Add(new Shortfall("Personal", remaining));
         }
 
-        List<ReportingSubtotal> reporting = reportingCategories
+        List<ReportingSubtotal> reporting = [.. reportingCategories
             .Select(category => new ReportingSubtotal(
                 category.Name,
                 category.FundingSource,
@@ -193,8 +183,7 @@ public static class ReconciliationEngine
                         && (string.Equals(transaction.Subcategory, category.Name, StringComparison.OrdinalIgnoreCase)
                             || string.Equals(transaction.Category, category.Name, StringComparison.OrdinalIgnoreCase)))
                     .Sum(transaction => -transaction.Amount)))
-            .OrderBy(subtotal => subtotal.Name, StringComparer.Ordinal)
-            .ToList();
+            .OrderBy(subtotal => subtotal.Name, StringComparer.Ordinal)];
 
         return new TransferPlan(
             cardPaymentTarget,
@@ -238,7 +227,16 @@ public static class ReconciliationEngine
             ComputeTransfers(cardPaymentTarget, cardAccountName, accounts, allocated, reportingCategories).Transfers,
             IsLocked: false,
             IsSettled: false,
-            discrepancy);
+            discrepancy,
+            DiscrepancyAcknowledged: discrepancy == 0m);
+    }
+
+    /// <summary>Records the user's decision to proceed despite a non-zero target discrepancy.</summary>
+    public static ReconciliationDraft AcknowledgeDiscrepancy(ReconciliationDraft draft)
+    {
+        return draft.IsLocked || draft.IsSettled
+            ? throw new InvalidOperationException("The discrepancy can only be acknowledged while the reconciliation is editable.")
+            : (draft with { DiscrepancyAcknowledged = true });
     }
 
     /// <summary>
@@ -252,11 +250,20 @@ public static class ReconciliationEngine
             throw new InvalidOperationException("A settled reconciliation cannot change transfer acknowledgements.");
         }
 
-        List<Transfer> transfers = draft.Transfers
+        if (draft.Discrepancy != 0m && !draft.DiscrepancyAcknowledged)
+        {
+            throw new InvalidOperationException("Acknowledge the payment-target discrepancy before confirming transfers.");
+        }
+
+        if (!draft.Transfers.Any(transfer => transfer.Source == source && transfer.Kind == kind))
+        {
+            throw new InvalidOperationException($"No {kind} transfer exists for {source}.");
+        }
+
+        List<Transfer> transfers = [.. draft.Transfers
             .Select(transfer => transfer.Source == source && transfer.Kind == kind
                 ? transfer with { Acknowledged = true }
-                : transfer)
-            .ToList();
+                : transfer)];
 
         return draft with { Transfers = transfers, IsLocked = true };
     }
@@ -276,11 +283,10 @@ public static class ReconciliationEngine
             throw new InvalidOperationException("A settled reconciliation cannot change transfer acknowledgements.");
         }
 
-        List<Transfer> transfers = draft.Transfers
+        List<Transfer> transfers = [.. draft.Transfers
             .Select(transfer => transfer.Source == source && transfer.Kind == kind
                 ? transfer with { Acknowledged = false }
-                : transfer)
-            .ToList();
+                : transfer)];
 
         return draft with { Transfers = transfers };
     }
@@ -288,16 +294,69 @@ public static class ReconciliationEngine
     /// <summary>Settles every included transaction together on the final acknowledgement.</summary>
     public static ReconciliationDraft AcknowledgeCardPaid(ReconciliationDraft draft)
     {
+        if (draft.IsSettled)
+        {
+            throw new InvalidOperationException("The reconciliation is already settled.");
+        }
+
         if (!draft.IsLocked || draft.Transfers.Any(transfer => transfer.Kind != TransferKind.CardPayment && !transfer.Acknowledged))
         {
             throw new InvalidOperationException("All funding transfers must be acknowledged before the card payment.");
         }
 
-        List<Transaction> settled = draft.Transactions
-            .Select(transaction => transaction with { Settled = true })
-            .ToList();
+        List<Transaction> settled = [.. draft.Transactions.Select(transaction => transaction with { Settled = true })];
+        List<Transfer> transfers = [.. draft.Transfers.Select(transfer =>
+            transfer.Kind == TransferKind.CardPayment ? transfer with { Acknowledged = true } : transfer)];
 
-        return draft with { Transactions = settled, IsSettled = true };
+        return draft with { Transactions = settled, Transfers = transfers, IsSettled = true };
+    }
+
+    /// <summary>
+    /// Projects only the outstanding agreed transfers from balances that describe the current state.
+    /// Acknowledged transfers are not applied a second time.
+    /// </summary>
+    public static IReadOnlyList<AccountBalance> ProjectRemainingTransfers(
+        IReadOnlyList<Account> accounts,
+        IReadOnlyList<Transfer> agreedTransfers)
+    {
+        Account intermediate = RequireRole(accounts, AccountRole.Intermediate);
+        Dictionary<string, decimal> balances = accounts.ToDictionary(
+            account => account.Name,
+            account => account.CurrentBalance,
+            StringComparer.Ordinal);
+
+        foreach (Transfer transfer in agreedTransfers.Where(transfer => !transfer.Acknowledged))
+        {
+            if (transfer.Kind == TransferKind.CardPayment)
+            {
+                balances[intermediate.Name] -= transfer.Amount;
+                continue;
+            }
+
+            if (!balances.ContainsKey(transfer.Source))
+            {
+                throw new InvalidOperationException($"The account set is missing the transfer source {transfer.Source}.");
+            }
+
+            balances[transfer.Source] -= transfer.Amount;
+            balances[intermediate.Name] += transfer.Amount;
+        }
+
+        return [.. accounts.Select(account => new AccountBalance(account.Name, balances[account.Name]))];
+    }
+
+    /// <summary>Reports protected-minimum breaches caused by the remaining agreed transfers.</summary>
+    public static IReadOnlyList<Shortfall> RemainingShortfalls(
+        IReadOnlyList<Account> accounts,
+        IReadOnlyList<Transfer> agreedTransfers)
+    {
+        IReadOnlyList<AccountBalance> projected = ProjectRemainingTransfers(accounts, agreedTransfers);
+        return [.. accounts
+            .Join(projected, account => account.Name, balance => balance.AccountName, (account, balance) => new { account, balance })
+            .Where(item => item.balance.ProjectedBalance < item.account.ProtectedMinimum)
+            .Select(item => new Shortfall(
+                item.account.Name,
+                item.account.ProtectedMinimum - item.balance.ProjectedBalance))];
     }
 
     private static SourceContribution ComputeContribution(
@@ -305,9 +364,7 @@ public static class ReconciliationEngine
         string cardAccountName,
         FundingSource source)
     {
-        IReadOnlyList<Transaction> matches = allocated
-            .Where(transaction => transaction.FundingSource == source)
-            .ToList();
+        IReadOnlyList<Transaction> matches = [.. allocated.Where(transaction => transaction.FundingSource == source)];
 
         decimal purchases = matches
             .Where(transaction => !IsRefund(transaction)
@@ -349,12 +406,9 @@ public static class ReconciliationEngine
 
         CategoryRule? category = categoryRules.FirstOrDefault(rule =>
             string.Equals(rule.Category, transaction.Category, StringComparison.OrdinalIgnoreCase));
-        if (category is not null)
-        {
-            return category.FundingSource;
-        }
-
-        return string.IsNullOrWhiteSpace(transaction.Category) ? null : FundingSource.Personal;
+        return category is not null
+            ? category.FundingSource
+            : string.IsNullOrWhiteSpace(transaction.Category) ? null : FundingSource.Personal;
     }
 
     private static Account RequireRole(IReadOnlyList<Account> accounts, AccountRole role) =>
