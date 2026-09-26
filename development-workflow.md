@@ -6,7 +6,7 @@ Build dot-finance through bounded implementation, automated validation, independ
 
 GitHub Issues and a GitHub Project will track work. Use the repository [nullabletype/dot-finance](https://github.com/nullabletype/dot-finance) and board [Project dot-finance](https://github.com/users/nullabletype/projects/2) (owner `nullabletype`, project number `2`). LikeC4 is the selected architectural diagramming tool and must participate in the development loop and build.
 
-The development toolchain may use GitHub, package registries, and agent services. The shipped application remains entirely offline. Only source code and synthetic financial data belong in development tickets, agent inputs, screenshots, logs, and CI artifacts.
+The development toolchain may use GitHub, package registries, and agent services. The shipped application remains entirely offline. Only source code and synthetic financial data belong in development tickets, agent inputs, screenshots, and logs. Follow the release-only GitHub Actions artifact policy in `AGENTS.md`; validation output remains in the job workspace or workflow result.
 
 ## Work tracking
 
