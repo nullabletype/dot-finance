@@ -5,13 +5,13 @@ Describe the behaviour or experiment outcome and link the issue. Use `Refs #...`
 ## Validation evidence
 
 - Tested commit:
-- Commands, results, and artifact links:
+- Commands, results, and evidence links:
 - Supported-platform evidence or explicit pending checks:
 - Limitations and remaining blockers:
 
 ## Architecture impact
 
-Link updated LikeC4 sources and generated artifact, or explain why this change has no architectural impact.
+Link updated LikeC4 sources and the validating workflow result, or explain why this change has no architectural impact.
 
 ## Gate checklist
 
@@ -19,4 +19,5 @@ Link updated LikeC4 sources and generated artifact, or explain why this change h
 - [ ] Required checks passed for the current commit; missing checks are not counted as passes.
 - [ ] Independent review complete; no unresolved blocking findings.
 - [ ] No real financial data or credentials in code, logs, screenshots, or artifacts.
+- [ ] Any GitHub Actions artifacts comply with the release-only policy in `AGENTS.md`.
 - [ ] Any required owner review is recorded.
