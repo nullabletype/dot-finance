@@ -49,49 +49,69 @@ internal static class LaunchEvidence
 
     public static void CaptureWorkflow(MainWindow window, IClassicDesktopStyleApplicationLifetime desktop, string outputDirectory)
     {
-        window.Opened += (_, _) => DispatcherTimer.RunOnce(() =>
+        window.Opened += (_, _) => DispatcherTimer.RunOnce(() => _ = CaptureWorkflowAsync(window, desktop, outputDirectory), TimeSpan.FromSeconds(2));
+    }
+
+    private static async Task CaptureWorkflowAsync(
+        MainWindow window,
+        IClassicDesktopStyleApplicationLifetime desktop,
+        string outputDirectory)
+    {
+        try
         {
-            try
-            {
-                Directory.CreateDirectory(outputDirectory);
-                window.PrepareWorkflowCapture();
+            Directory.CreateDirectory(outputDirectory);
+            window.PrepareWorkflowCapture();
 
-                window.SetThemeForCapture("Light");
-                RenderPng(window, Path.Combine(outputDirectory, "review-before-light.png"));
+            window.SetThemeForCapture("Light");
+            RenderPng(window, Path.Combine(outputDirectory, "review-before-light.png"));
 
-                window.SetThemeForCapture("Dark");
-                RenderPng(window, Path.Combine(outputDirectory, "review-before-dark.png"));
+            window.SetThemeForCapture("Dark");
+            RenderPng(window, Path.Combine(outputDirectory, "review-before-dark.png"));
 
-                window.Width = 1040;
-                window.Height = 660;
-                Dispatcher.UIThread.RunJobs();
-                RenderPng(window, Path.Combine(outputDirectory, "review-compact-dark.png"));
-                object compactLayout = window.ReviewLayoutEvidence();
+            window.Width = 1040;
+            window.Height = 660;
+            await WaitForCompactWidthAsync(window, 1040);
+            RenderPng(window, Path.Combine(outputDirectory, "review-compact-dark.png"));
+            object compactLayout = window.ReviewLayoutEvidence();
 
-                window.Width = 1320;
-                window.Height = 820;
-                Dispatcher.UIThread.RunJobs();
+            window.Width = 1320;
+            window.Height = 820;
+            await Task.Delay(250);
 
-                object before = WorkflowSnapshot(window.Session);
-                window.ApplyWorkflowCaptureCorrection();
+            object before = WorkflowSnapshot(window.Session);
+            window.ApplyWorkflowCaptureCorrection();
 
-                window.SetThemeForCapture("Light");
-                RenderPng(window, Path.Combine(outputDirectory, "review-after-light.png"));
+            window.SetThemeForCapture("Light");
+            RenderPng(window, Path.Combine(outputDirectory, "review-after-light.png"));
 
-                window.SetThemeForCapture("Dark");
-                RenderPng(window, Path.Combine(outputDirectory, "review-after-dark.png"));
+            window.SetThemeForCapture("Dark");
+            RenderPng(window, Path.Combine(outputDirectory, "review-after-dark.png"));
 
-                File.WriteAllText(
-                    Path.Combine(outputDirectory, "workflow.json"),
-                    JsonSerializer.Serialize(WorkflowEvidence(window, before, compactLayout), JsonOptions));
-                desktop.Shutdown(0);
-            }
-            catch (Exception exception)
-            {
-                Console.Error.WriteLine(exception);
-                desktop.Shutdown(1);
-            }
-        }, TimeSpan.FromSeconds(2));
+            File.WriteAllText(
+                Path.Combine(outputDirectory, "workflow.json"),
+                JsonSerializer.Serialize(WorkflowEvidence(window, before, compactLayout), JsonOptions));
+            desktop.Shutdown(0);
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine(exception);
+            desktop.Shutdown(1);
+        }
+    }
+
+    private static async Task WaitForCompactWidthAsync(MainWindow window, double width)
+    {
+        DateTimeOffset timeout = DateTimeOffset.UtcNow.AddSeconds(2);
+        while (window.Bounds.Width > width + 0.5 && DateTimeOffset.UtcNow < timeout)
+        {
+            await Task.Delay(50);
+        }
+
+        if (window.Bounds.Width > width + 0.5)
+        {
+            throw new InvalidOperationException(
+                $"Native window did not enter the compact width of {width}; actual width is {window.Bounds.Width}.");
+        }
     }
 
     private static void RenderPng(MainWindow window, string path)
