@@ -127,6 +127,7 @@ public sealed class ReconciliationEngineTests
 
         Assert.False(draft.IsLocked);
 
+        draft = ReconciliationEngine.AcknowledgeDiscrepancy(draft);
         ReconciliationDraft locked = ReconciliationEngine.AcknowledgeTransfer(draft, "Joint", TransferKind.Funding);
         Assert.True(locked.IsLocked);
         Assert.True(locked.Transfers.Single(transfer => transfer.Source == "Joint").Acknowledged);
@@ -139,6 +140,7 @@ public sealed class ReconciliationEngineTests
         ReconciliationDraft settled = ReconciliationEngine.AcknowledgeCardPaid(acknowledged);
         Assert.True(settled.IsSettled);
         Assert.All(settled.Transactions, transaction => Assert.True(transaction.Settled));
+        Assert.Throws<InvalidOperationException>(() => ReconciliationEngine.AcknowledgeCardPaid(settled));
     }
 
     [Fact]
@@ -150,9 +152,24 @@ public sealed class ReconciliationEngineTests
         Assert.Throws<InvalidOperationException>(() => ReconciliationEngine.AcknowledgeCardPaid(draft));
     }
 
+    [Fact]
+    public void Transfer_acknowledgement_requires_discrepancy_acknowledgement()
+    {
+        IReadOnlyList<Transaction> allocated = ReconciliationEngine.Allocate(BaseTransactions(), CategoryRules(), [], null);
+        ReconciliationDraft draft = ReconciliationEngine.BuildDraft(1200m, Card, BaseAccounts(), allocated, Reporting());
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => ReconciliationEngine.AcknowledgeTransfer(draft, "Joint", TransferKind.Funding));
+
+        Assert.Contains("discrepancy", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(draft.IsLocked);
+    }
+
     private static ReconciliationDraft AcknowledgeAllFunding(ReconciliationDraft draft)
     {
-        ReconciliationDraft current = draft;
+        ReconciliationDraft current = draft.DiscrepancyAcknowledged
+            ? draft
+            : ReconciliationEngine.AcknowledgeDiscrepancy(draft);
         foreach (Transfer transfer in draft.Transfers.Where(transfer => transfer.Kind != TransferKind.CardPayment))
         {
             current = ReconciliationEngine.AcknowledgeTransfer(current, transfer.Source, transfer.Kind);

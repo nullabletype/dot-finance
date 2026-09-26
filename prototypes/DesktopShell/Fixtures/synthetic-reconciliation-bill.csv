@@ -1,0 +1,2 @@
+ID,Date,Amount,Account,Bank,Currency,Category,Subcategory,Type,Tags,Counterparty,Custom Name,Merchant,Additional details,Notes,Linked transaction ID
+R-0007,2026-09-10,-60.00,Primary,Example Bank,GBP,Groceries,,Bill,utility,Example Utility,,Example Utility Ltd,Joint bill already paid from Personal,,

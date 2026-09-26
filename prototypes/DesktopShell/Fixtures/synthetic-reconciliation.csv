@@ -1,0 +1,7 @@
+ID,Date,Amount,Account,Bank,Currency,Category,Subcategory,Type,Tags,Counterparty,Custom Name,Merchant,Additional details,Notes,Linked transaction ID
+R-0001,2026-09-02,-300.00,Fictional Amex,Example Bank,GBP,Groceries,,Purchase,weekly,Example Market,,Example Market Ltd,Synthetic purchase,,
+R-0002,2026-09-03,-150.00,Fictional Amex,Example Bank,GBP,Dining,,Purchase,,Example Bistro,,Example Bistro Ltd,Synthetic purchase,,
+R-0003,2026-09-05,-150.00,Fictional Amex,Example Bank,GBP,Travel,Holidays,Purchase,,Example Travel,,Example Travel Ltd,Synthetic purchase,,
+R-0004,2026-09-06,-100.00,Fictional Amex,Example Bank,GBP,Travel,Transport,Purchase,,Example Rail,,Example Rail Ltd,Synthetic purchase,,
+R-0005,2026-09-07,-25.00,Fictional Amex,Example Bank,GBP,,,Purchase,,Misc Shop,,Misc Shop Ltd,Synthetic uncategorised purchase,,
+R-0006,2026-09-08,-50.00,Fictional Amex,Example Bank,GBP,,,Card repayment,,,,,Synthetic card repayment,,

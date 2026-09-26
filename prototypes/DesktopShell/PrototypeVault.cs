@@ -1,5 +1,5 @@
-using System.Text.Json;
 using System.Diagnostics;
+using System.Text.Json;
 
 using Microsoft.Data.Sqlite;
 
@@ -16,6 +16,7 @@ public sealed class VaultAuthenticationException(string message, Exception? inne
 public sealed class PrototypeVault : IDisposable
 {
     private const string StateKey = "prototype-state";
+    private const string ScenarioKey = "scenario-state";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.General);
     private readonly SqliteConnection _connection;
     private readonly string _password;
@@ -99,11 +100,34 @@ public sealed class PrototypeVault : IDisposable
         using SqliteCommand command = _connection.CreateCommand();
         command.CommandText = "SELECT value FROM prototype_state WHERE key = $key;";
         command.Parameters.AddWithValue("$key", StateKey);
-        string? json = command.ExecuteScalar() as string;
-        return json is null
+        return command.ExecuteScalar() is not string json
             ? throw new InvalidOperationException("The prototype vault does not contain imported state.")
             : JsonSerializer.Deserialize<PrototypeState>(json, JsonOptions)
                 ?? throw new InvalidDataException("The stored prototype state is invalid.");
+    }
+
+    public ScenarioState LoadScenario()
+    {
+        using SqliteCommand command = _connection.CreateCommand();
+        command.CommandText = "SELECT value FROM prototype_state WHERE key = $key;";
+        command.Parameters.AddWithValue("$key", ScenarioKey);
+        return command.ExecuteScalar() is not string json
+            ? throw new InvalidOperationException("The scenario vault does not contain a saved workflow.")
+            : JsonSerializer.Deserialize<ScenarioState>(json, JsonOptions)
+                ?? throw new InvalidDataException("The stored scenario state is invalid.");
+    }
+
+    public void SaveScenario(ScenarioState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        using SqliteTransaction transaction = _connection.BeginTransaction();
+        using SqliteCommand command = _connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "INSERT INTO prototype_state (key, value) VALUES ($key, $value) ON CONFLICT(key) DO UPDATE SET value = excluded.value;";
+        command.Parameters.AddWithValue("$key", ScenarioKey);
+        command.Parameters.AddWithValue("$value", JsonSerializer.Serialize(state, JsonOptions));
+        command.ExecuteNonQuery();
+        transaction.Commit();
     }
 
     public void Save(PrototypeState state) => Save(state, CancellationToken.None, null);
