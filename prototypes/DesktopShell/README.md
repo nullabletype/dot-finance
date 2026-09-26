@@ -1,26 +1,42 @@
-# Experimental desktop and encrypted persistence — issues #1 and #2
+# Experimental desktop, encrypted persistence, and guided reconciliation — issues #1 to #3
 
-This disposable Avalonia/.NET 10 shell now exercises one local path with fictional data: enter a session password, import the committed synthetic CSV, save encrypted state, reopen it, create an encrypted backup, and restore it with the same password. It never connects to a bank, calculates transfers, or initiates payments.
+This disposable Avalonia/.NET 10 shell exercises local workflows with fictional data: import committed synthetic CSVs, review live allocation totals, enter balances and the card target, inspect protected-balance projections, acknowledge external transfers, settle the card payment, save encrypted state, and reopen completed history. It never connects to a bank or initiates a payment.
 
-The summary amounts remain fictional constants. The persistence experiment stores synthetic transaction fields plus sample allocation and settlement state; it is not production data modelling or a complete importer.
+The values are synthetic experiment inputs, not product defaults. The persistence experiment stores synthetic transaction fields plus sample allocation and settlement state; it is not production data modelling or a complete importer.
 
 ## Run from the repository root
 
-Install the stable .NET SDK selected by `global.json` and Node >=22.22.3. The workflow uses Node 24.15.0. Dependencies are pinned in the project/package manifests and lockfiles.
+Install the stable .NET SDK selected by `global.json` and a supported Node release accepted by `package.json`. CI uses Node 24.21.0 LTS. Dependencies are pinned in the project/package manifests and lockfiles.
 
 ```sh
 npm ci
 npm run build
 npm run smoke
 npm run persistence:smoke
+npm run workflow:smoke
 npm start
 ```
 
 Development restore requires package-registry access. The published app itself has no networking feature. `npm run build` validates and generates LikeC4, rejects an intentionally invalid model, restores locked dependencies, builds with warnings as errors, runs behavioral tests, checks SDK formatting, and publishes the shell.
 
+## Guided reconciliation walkthrough
+
+1. Start with `npm start`. Enter a temporary session password if you want to save and reopen the scenario; it is not persisted.
+2. Import **base card purchases**. Re-import it to see all six IDs skipped. On Review, confirm Joint £450, Shared Savings £250, Personal £400, Holidays £150, one £25 uncategorised item requiring review, and a £475 card-target discrepancy.
+3. Preview changing Groceries to Personal. The preview text changes, but the live sidebar remains on the accepted draft. Apply the rule or use an allocation override to see the live and transfer totals change immediately.
+4. Correct `R-0005` to category `Groceries`. The warning clears and Joint becomes £475. Restart for the untouched canonical fixture before continuing with the issue totals.
+5. Import the base fixture and the £60 Joint bill. Confirm Joint £510, Shared Savings £250, Primary £200, Personal Savings £140, projected intermediate £80, and projected primary £120. The entered balances have not been reduced by the bill a second time.
+6. On Acknowledge, explicitly acknowledge the target discrepancy. Acknowledge the first transfer to lock the transaction set and agreed amounts; undo it and confirm the draft remains locked. New imports are queued for the next reconciliation.
+7. After performing a confirmed transfer outside the prototype, update the affected current balances on Review. Projections apply only outstanding steps, so the confirmed transfer is not counted twice.
+8. Acknowledge every funding transfer, then **Card paid**. All reserved transactions settle together and the completed amounts appear under History. Save, restart, enter the same password, and Reopen to inspect the restored history.
+9. For the refund path, restart and import only **refund demo**: the £150 refund against a £100 Joint purchase produces a £50 outgoing reimbursement. For the shortfall path, lower Joint below the £450 required amount; its acknowledgement is labelled Blocked and completion remains unavailable.
+10. Switch System, Light, and Dark themes. The selection persists across restarts independently of the encrypted scenario.
+
+`npm run workflow:smoke` repeats the calculation path and captures Light and Dark Review screenshots before and after accepting the `R-0005` correction, plus a compact-window layout. Its JSON records expected and actual base, correction, £60 bill, refund, duplicate, insufficient-funds, and responsive containment outcomes. This evidence supports the owner walkthrough; it does not replace the required owner accept/revise decision.
+
 ## Persistence design under test
 
-- `PrototypeVault` is the agreed behavioral seam. It stores one JSON state document in SQLite encrypted by SQLite3MC, using the password supplied for the current process.
+- `PrototypeVault` is the agreed behavioral seam. It stores JSON state documents in SQLite encrypted by SQLite3MC, using the password supplied for the current process.
 - The working database and backup are both SQLite3MC databases protected by the same password. The password is retained in process memory while a vault is open but is not written to app settings, evidence, logs, or files.
 - SQLite transactions protect saves. Backups are written as a sibling `.partial` file, validated, and atomically renamed; restore validates a sibling candidate before replacing working state.
 - Wrong passwords and SQLite3MC-detected corruption produce a generic authentication/damage failure. They do not replace an existing working database.
@@ -48,7 +64,7 @@ These assumptions are **not evidence of Emma's actual export format**. No real e
 
 ## Validation and evidence
 
-`npm run smoke` captures native launch evidence as described by issue #1. The persistence tests cover exact reopen/restore equality, wrong passwords, a tampered backup, cancellation before save commit, and cancellation before backup replacement. The persistence smoke abruptly terminates child processes before a save commit and after a backup is staged, then starts a new process to verify recovery. It confirms the complete backup hash did not change and the interrupted output remains visibly suffixed `.partial` rather than being presented as complete.
+`npm run smoke` captures native launch evidence as described by issue #1. `npm run workflow:smoke` captures the issue #3 Review state in both themes before and after an accepted correction and checks the recorded expected/actual totals. The persistence tests cover exact reopen/restore equality, wrong passwords, a tampered backup, cancellation before save commit, and cancellation before backup replacement. The persistence smoke abruptly terminates child processes before a save commit and after a backup is staged, then starts a new process to verify recovery. It confirms the complete backup hash did not change and the interrupted output remains visibly suffixed `.partial` rather than being presented as complete.
 
 CI runs the tests and local persistence smoke on all three OS families. A sequential job moves the encrypted backup macOS → Windows → Linux → macOS and compares the restored state digest at each stage. The Linux job also runs the persistence scenario in a network namespace with networking blocked and traces network syscalls; any socket/connect/send attempt fails the gate. Hosted evidence applies only after those jobs run for a clean commit.
 
@@ -57,6 +73,7 @@ Generated outputs include:
 - `artifacts/desktop/`: framework-dependent application and synthetic fixture;
 - `artifacts/architecture/`: interactive experimental architecture site;
 - `artifacts/persistence-local/`: encrypted files and local round-trip evidence;
+- `artifacts/workflow-local/`: five responsive theme screenshots plus expected/actual guided-workflow evidence;
 - `artifacts/offline-network/`: Linux blocked-network trace in CI;
 - `artifacts/launch-*/` and `artifacts/build.json`: native launch and tested-source metadata.
 
@@ -64,4 +81,4 @@ Byte-pattern inspection inventories every file in the app-managed scenario works
 
 ## Current decision
 
-Decision (#12): SQLite3MC is selected as the maintained replacement for the deprecated SQLCipher bundle. Retain this vault seam for the guided-workflow experiment; rework is still required before production use. The prototype does not establish password recovery, production migrations, large-dataset behavior, packaging/signing, or final security suitability.
+Decision (#12): SQLite3MC is selected as the maintained replacement for the deprecated SQLCipher bundle. Retain this vault seam for the guided-workflow experiment; rework is still required before production use. The owner accepted the guided workflow direction on 2026-09-26; independent review remains pending. The prototype does not establish password recovery, production migrations, large-dataset behavior, packaging/signing, final security suitability, or production UI architecture.

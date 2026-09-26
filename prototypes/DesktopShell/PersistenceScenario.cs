@@ -7,6 +7,8 @@ namespace DesktopShell;
 
 internal static class PersistenceScenario
 {
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+
     private enum CycleMode
     {
         Initialize,
@@ -101,10 +103,8 @@ internal static class PersistenceScenario
         if (mode == CycleMode.Initialize)
         {
             File.Delete(databasePath);
-            using (PrototypeVault vault = PrototypeVault.Create(databasePath, password))
-            {
-                vault.Save(expected);
-            }
+            using PrototypeVault vault = PrototypeVault.Create(databasePath, password);
+            vault.Save(expected);
         }
         else
         {
@@ -137,7 +137,7 @@ internal static class PersistenceScenario
             passwordPersisted = false,
             timestampUtc = DateTimeOffset.UtcNow,
             scope = "Synthetic fixture round trip and byte-pattern inspection; not a forensic memory, swap, filesystem or cryptographic audit."
-        }, new JsonSerializerOptions { WriteIndented = true }));
+        }, JsonOptions));
     }
 
     public static string RunLocalRoundTrip(string workspace, string fixturePath, string password)
