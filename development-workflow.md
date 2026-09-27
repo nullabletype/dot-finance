@@ -2,7 +2,7 @@
 
 ## Purpose and status
 
-Build dot-finance through bounded implementation, automated validation, independent review, and correction. This document records the proposed operating model; it does not provision automation or grant merge or release permissions.
+Build dot-finance through bounded implementation, automated validation, independent review, and correction. The owner accepted this manually invoked operating model at the issue #5 decision gate on 2026-09-27. It does not provision unattended automation or grant automatic merge or release permissions.
 
 GitHub Issues and a GitHub Project will track work. Use the repository [nullabletype/dot-finance](https://github.com/nullabletype/dot-finance) and board [Project dot-finance](https://github.com/users/nullabletype/projects/2) (owner `nullabletype`, project number `2`). LikeC4 is the selected architectural diagramming tool and must participate in the development loop and build.
 
@@ -22,7 +22,7 @@ Close an issue after integration and required validation, not merely after openi
 
 ## Prototype phase
 
-Before detailed implementation planning, run the prototype tickets on the GitHub Project. Prototypes answer bounded questions and are disposable by default. Keep experiments under `prototypes/`; retaining code later requires production validation and an explicit decision. Avalonia remains provisional until the technical evidence supports it.
+Before detailed implementation planning, run the prototype tickets on the GitHub Project. Prototypes answer bounded questions and are disposable by default. Keep experiments under `prototypes/`; retaining behaviour or technology choices later requires production validation and an explicit decision. The issue #5 gate accepted Avalonia/.NET, SQLite3MC, and the guided reconciliation semantics as production-planning directions; it did not promote prototype code into production.
 
 Sequence: build and LikeC4 foundation → encrypted desktop round trip → reconciliation workflow trial → decision checkpoint. Exercise controller failure and recovery after the foundation is available, before unattended runs. Track dependencies on GitHub, not in a duplicate local backlog.
 
