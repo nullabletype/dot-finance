@@ -36,5 +36,6 @@ npm run workflow:smoke
 ## Independent review follow-up
 
 - Independent review on 2026-09-27 found four behavioural gaps in the integrated prototype: unresolved review items did not block acknowledgement, completion did not advance to a new draft, changed re-imports were silently skipped, and non-GBP rows did not require an actual GBP amount. Issue #25 owns the bounded repair and its fresh exact-commit review/hosted evidence.
+- The issue #25 repair also closes review-discovered edge cases around locked corrections, correction replay and sequencing, preserved funding responsibility, foreign-currency display, history inspection, safe reopening, and legacy saved-state migration. Two independent final re-reviews found no remaining actionable spec, correctness, standards, or quality findings. Local build and encrypted-persistence checks pass with 38 workflow tests; fresh hosted exact-commit workflow evidence remains required.
 - The earlier integrated prototype passed hosted macOS, Windows and Linux workflow validation plus the cross-platform backup chain in run 36311078900. That evidence predates issue #25 and cannot validate its repair commit.
 - The prototype remains disposable and synthetic-only. Production architecture, importer formats, migrations, packaging/signing, security suitability, and large-dataset behaviour remain undecided.

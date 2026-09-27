@@ -272,6 +272,25 @@ public sealed class WorkflowSessionTests
         session.Import(Fixture("synthetic-refund.csv"));
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(session.ReopenLatestCompleted);
         Assert.Contains("newer reconciliation", exception.Message, StringComparison.OrdinalIgnoreCase);
+
+        WorkflowSession changedTarget = new();
+        CompleteBaseReconciliation(changedTarget);
+        changedTarget.SetCardPaymentTarget(900m);
+        Assert.False(changedTarget.CanReopenLatestCompleted);
+        Assert.Throws<InvalidOperationException>(changedTarget.ReopenLatestCompleted);
+
+        WorkflowSession changedBalance = new();
+        CompleteBaseReconciliation(changedBalance);
+        changedBalance.SetBalance("Joint", 900m);
+        Assert.False(changedBalance.CanReopenLatestCompleted);
+        Assert.Throws<InvalidOperationException>(changedBalance.ReopenLatestCompleted);
+
+        WorkflowSession twoCompletions = CompletedSessionWithPendingRefund();
+        CompleteCurrentDraft(twoCompletions);
+        Assert.Equal(2, twoCompletions.CompletedReconciliations.Count);
+        twoCompletions.ReopenLatestCompleted();
+        Assert.False(twoCompletions.CanReopenLatestCompleted);
+        Assert.Throws<InvalidOperationException>(twoCompletions.ReopenLatestCompleted);
     }
 
     [Fact]
@@ -302,6 +321,15 @@ public sealed class WorkflowSessionTests
         Assert.Equal(-320m, correction.Updated.Amount);
         Assert.Equal(-300m, locked.Draft!.Transactions.Single(transaction => transaction.Id == "R-0001").Amount);
         Assert.Throws<InvalidOperationException>(() => locked.AcceptPendingCorrection("R-0001"));
+        foreach (Transfer transfer in locked.Draft.Transfers.Where(transfer =>
+            transfer.Kind != TransferKind.CardPayment && !transfer.Acknowledged))
+        {
+            locked.AcknowledgeTransfer(transfer.Source, transfer.Kind);
+        }
+
+        locked.AcknowledgeCardPaid();
+        Assert.Single(locked.CompletedReconciliations);
+        Assert.Single(locked.PendingCorrections);
 
         WorkflowSession settled = new();
         CompleteBaseReconciliation(settled);
@@ -317,11 +345,201 @@ public sealed class WorkflowSessionTests
 
         Assert.Empty(settled.PendingCorrections);
         Assert.Equal(2, settled.Allocated.Count);
-        Assert.Contains(settled.Allocated, transaction => transaction.Id == "adjustment:R-0001:reversal" && transaction.Amount == 300m);
-        Assert.Contains(settled.Allocated, transaction => transaction.Id == "adjustment:R-0001:replacement" && transaction.Amount == -320m);
+        Assert.Contains(settled.Allocated, transaction => transaction.Id == "adjustment:R-0001:1:reversal" && transaction.Amount == 300m);
+        Assert.Contains(settled.Allocated, transaction => transaction.Id == "adjustment:R-0001:1:replacement" && transaction.Amount == -320m);
         Assert.Equal(20m, Contribution(settled, FundingSource.Joint));
         Assert.Equal(1180m, settled.Draft!.Discrepancy);
         Assert.Equal(-300m, Assert.Single(settled.CompletedReconciliations).Transactions.Single(transaction => transaction.Id == "R-0001").Amount);
+
+        ImportResult acceptedReplay = settled.Import(Fixture("synthetic-reconciliation-changed.csv"));
+        Assert.Equal(1, acceptedReplay.Skipped);
+        Assert.Empty(settled.PendingCorrections);
+        Assert.Equal(2, settled.Allocated.Count);
+
+        WorkflowSession restored = new();
+        restored.FromState(settled.ToState());
+        ImportResult restoredReplay = restored.Import(Fixture("synthetic-reconciliation-changed.csv"));
+        Assert.Equal(1, restoredReplay.Skipped);
+        Assert.Empty(restored.PendingCorrections);
+        Assert.Equal(20m, Contribution(restored, FundingSource.Joint));
+    }
+
+    [Fact]
+    public void Settled_correction_reverses_the_funding_source_recorded_at_completion()
+    {
+        WorkflowSession session = new();
+        session.Import(Fixture("synthetic-reconciliation.csv"));
+        session.SetOverride("R-0001", FundingSource.Personal);
+        session.SetOverride("R-0005", FundingSource.Joint);
+        session.AcknowledgeDiscrepancy();
+        foreach (Transfer transfer in session.Draft!.Transfers.Where(transfer => transfer.Kind != TransferKind.CardPayment))
+        {
+            session.AcknowledgeTransfer(transfer.Source, transfer.Kind);
+        }
+
+        session.AcknowledgeCardPaid();
+        session.Import(Fixture("synthetic-reconciliation-changed.csv"));
+        session.AcceptPendingCorrection("R-0001");
+
+        Assert.Contains(session.Allocated, transaction => transaction.Type == "Correction reversal"
+            && transaction.FundingSource == FundingSource.Personal
+            && transaction.Amount == 300m);
+        Assert.Contains(session.Allocated, transaction => transaction.Type == "Correction replacement"
+            && transaction.FundingSource == FundingSource.Joint
+            && transaction.Amount == -320m);
+        Assert.Equal(320m, Contribution(session, FundingSource.Joint));
+    }
+
+    [Fact]
+    public void Accepted_correction_baseline_survives_encrypted_round_trip()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), $"dot-finance-correction-{Guid.NewGuid():N}");
+        string databasePath = Path.Combine(directory, "workflow.db");
+        const string password = "fictional-test-password";
+        try
+        {
+            WorkflowSession session = new();
+            CompleteBaseReconciliation(session);
+            session.Import(Fixture("synthetic-reconciliation-changed.csv"));
+            session.AcceptPendingCorrection("R-0001");
+            using (PrototypeVault vault = PrototypeVault.Create(databasePath, password))
+            {
+                vault.SaveScenario(session.ToState());
+            }
+
+            using PrototypeVault restoredVault = PrototypeVault.Unlock(databasePath, password);
+            WorkflowSession restored = new();
+            restored.FromState(restoredVault.LoadScenario());
+
+            ImportResult replay = restored.Import(Fixture("synthetic-reconciliation-changed.csv"));
+            Assert.Equal(1, replay.Skipped);
+            Assert.Empty(restored.PendingCorrections);
+            Assert.Equal(20m, Contribution(restored, FundingSource.Joint));
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Pre_baseline_state_reconstructs_an_accepted_correction_and_skips_its_replay()
+    {
+        WorkflowSession session = new();
+        CompleteBaseReconciliation(session);
+        session.Import(Fixture("synthetic-reconciliation-changed.csv"));
+        session.AcceptPendingCorrection("R-0001");
+        ScenarioState current = session.ToState();
+        ScenarioState legacy = current with { AcceptedCorrectionBaselines = null };
+
+        WorkflowSession restored = new();
+        restored.FromState(legacy);
+        ImportResult replay = restored.Import(Fixture("synthetic-reconciliation-changed.csv"));
+
+        Assert.Equal(1, replay.Skipped);
+        Assert.Empty(restored.PendingCorrections);
+        Assert.Equal(20m, Contribution(restored, FundingSource.Joint));
+    }
+
+    [Fact]
+    public void Locked_pre_baseline_state_reconstructs_the_accepted_replacement_source()
+    {
+        string secondCorrection = ChangedSingleRowFixture(2, "-330.00");
+        try
+        {
+            WorkflowSession session = new();
+            session.Import(Fixture("synthetic-reconciliation.csv"));
+            session.SetOverride("R-0001", FundingSource.Personal);
+            session.SetOverride("R-0005", FundingSource.Joint);
+            CompleteCurrentDraft(session);
+            session.Import(Fixture("synthetic-reconciliation-changed.csv"));
+            session.AcceptPendingCorrection("R-0001");
+            session.AcknowledgeDiscrepancy();
+            Transfer first = session.Draft!.Transfers.First(transfer => transfer.Kind != TransferKind.CardPayment);
+            session.AcknowledgeTransfer(first.Source, first.Kind);
+            ScenarioState legacy = session.ToState() with { AcceptedCorrectionBaselines = null };
+
+            WorkflowSession restored = new();
+            restored.FromState(legacy);
+            restored.Import(secondCorrection);
+            foreach (Transfer transfer in restored.Draft!.Transfers.Where(transfer =>
+                transfer.Kind != TransferKind.CardPayment && !transfer.Acknowledged))
+            {
+                restored.AcknowledgeTransfer(transfer.Source, transfer.Kind);
+            }
+
+            restored.AcknowledgeCardPaid();
+            restored.ApplyCategoryRule("Groceries", FundingSource.Personal);
+            restored.AcceptPendingCorrection("R-0001");
+
+            Assert.Contains(restored.Allocated, transaction => transaction.Type == "Correction reversal"
+                && transaction.FundingSource == FundingSource.Joint);
+            Assert.Contains(restored.Allocated, transaction => transaction.Type == "Correction replacement"
+                && transaction.FundingSource == FundingSource.Personal);
+        }
+        finally
+        {
+            File.Delete(secondCorrection);
+        }
+    }
+
+    [Fact]
+    public void Successive_settled_corrections_have_unique_adjustment_ids()
+    {
+        string secondCorrection = ChangedSingleRowFixture(2, "-330.00");
+        try
+        {
+            WorkflowSession session = new();
+            CompleteBaseReconciliation(session);
+            session.Import(Fixture("synthetic-reconciliation-changed.csv"));
+            session.AcceptPendingCorrection("R-0001");
+            CompleteCurrentDraft(session);
+
+            session.Import(secondCorrection);
+            session.AcceptPendingCorrection("R-0001");
+
+            string[] ids = [.. session.CompletedReconciliations
+                .SelectMany(reconciliation => reconciliation.Transactions)
+                .Concat(session.Allocated)
+                .Select(transaction => transaction.Id)];
+            Assert.Equal(ids.Length, ids.Distinct(StringComparer.Ordinal).Count());
+            Assert.Contains("adjustment:R-0001:1:replacement", ids);
+            Assert.Contains("adjustment:R-0001:2:replacement", ids);
+        }
+        finally
+        {
+            File.Delete(secondCorrection);
+        }
+    }
+
+    [Fact]
+    public void Changed_non_gbp_amount_requires_a_fresh_actual_gbp_value()
+    {
+        string firstChange = ChangedFixture("synthetic-non-gbp.csv", 2, "-350.00");
+        string secondChange = ChangedFixture("synthetic-non-gbp.csv", 2, "-375.00");
+        try
+        {
+            WorkflowSession session = new();
+            session.Import(Fixture("synthetic-non-gbp.csv"));
+            session.SetActualGbpAmount("R-0200", -275m);
+            CompleteCurrentDraft(session);
+            session.Import(firstChange);
+            session.AcceptPendingCorrection("R-0200");
+            session.SetActualGbpAmount("adjustment:R-0200:1:replacement", -320m);
+            session.Import(secondChange);
+
+            Transaction replacement = session.Allocated.Single(transaction => transaction.Type == "Correction replacement");
+            Assert.Null(replacement.ActualGbpAmount);
+            Assert.True(replacement.RequiresReview);
+        }
+        finally
+        {
+            File.Delete(firstChange);
+            File.Delete(secondChange);
+        }
     }
 
     [Fact]
@@ -464,12 +682,34 @@ public sealed class WorkflowSessionTests
         return path;
     }
 
+    private static string ChangedFixture(string fixtureName, int index, string value)
+    {
+        string[] lines = File.ReadAllLines(Fixture(fixtureName));
+        string[] fields = lines[1].Split(',');
+        fields[index] = value;
+        string path = Path.Combine(Path.GetTempPath(), $"dot-finance-reimport-{Guid.NewGuid():N}.csv");
+        File.WriteAllLines(path, [lines[0], string.Join(',', fields)]);
+        return path;
+    }
+
     private static void CompleteBaseReconciliation(WorkflowSession session)
     {
         session.Import(Fixture("synthetic-reconciliation.csv"));
         session.SetOverride("R-0005", FundingSource.Joint);
         session.AcknowledgeDiscrepancy();
         foreach (Transfer transfer in session.Draft!.Transfers.Where(transfer => transfer.Kind != TransferKind.CardPayment))
+        {
+            session.AcknowledgeTransfer(transfer.Source, transfer.Kind);
+        }
+
+        session.AcknowledgeCardPaid();
+    }
+
+    private static void CompleteCurrentDraft(WorkflowSession session)
+    {
+        session.AcknowledgeDiscrepancy();
+        foreach (Transfer transfer in session.Draft!.Transfers.Where(transfer =>
+            transfer.Kind != TransferKind.CardPayment && !transfer.Acknowledged))
         {
             session.AcknowledgeTransfer(transfer.Source, transfer.Kind);
         }

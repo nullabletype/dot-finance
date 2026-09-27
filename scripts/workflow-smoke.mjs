@@ -46,8 +46,8 @@ const checks = [
   ['Joint bill Personal', evidence.jointBill.additionalPersonalTransfers, evidence.expected.jointBill.personal],
   ['refund', evidence.refund.jointContribution, evidence.expected.refund.joint],
   ['Joint shortfall', evidence.insufficientFunds.shortfalls.find(item => item.account === 'Joint')?.amount, evidence.expected.insufficientFunds.shortfall],
-  ['duplicates added', evidence.duplicateImport.Added, evidence.expected.duplicateImport.added],
-  ['duplicates skipped', evidence.duplicateImport.Skipped, evidence.expected.duplicateImport.skipped],
+  ['duplicates added', evidence.duplicateImport.added, evidence.expected.duplicateImport.added],
+  ['duplicates skipped', evidence.duplicateImport.skipped, evidence.expected.duplicateImport.skipped],
   ['unresolved review blocked', evidence.reviewBlock.blocked, evidence.expected.reviewBlock.blocked],
   ['unresolved review did not lock', evidence.reviewBlock.locked, evidence.expected.reviewBlock.locked],
   ['non-GBP initially requires review', evidence.nonGbp.initiallyRequiresReview, true],
@@ -58,7 +58,9 @@ const checks = [
   ['correction consumed', evidence.correction.remaining, evidence.expected.correction.remaining],
   ['correction adjustment transactions', evidence.correction.adjustmentTransactions, evidence.expected.correction.adjustmentTransactions],
   ['correction Joint adjustment', evidence.correction.jointAdjustment, evidence.expected.correction.jointAdjustment],
-  ['correction preserves history', evidence.correction.preservedOriginalAmount, evidence.expected.correction.preservedOriginalAmount]
+  ['correction preserves history', evidence.correction.preservedOriginalAmount, evidence.expected.correction.preservedOriginalAmount],
+  ['accepted correction replay skipped', evidence.correction.acceptedReplaySkipped, evidence.expected.correction.acceptedReplaySkipped],
+  ['changed target blocks reopen', evidence.reopenGuard.changedTargetBlocksReopen, evidence.expected.reopenGuard.changedTargetBlocksReopen]
 ];
 for (const [name, actual, expected] of checks) {
   if (actual !== expected) throw new Error(`${name}: expected ${expected}, got ${actual}`);
