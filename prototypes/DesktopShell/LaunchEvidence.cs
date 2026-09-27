@@ -77,6 +77,20 @@ internal static class LaunchEvidence
 
             window.SetThemeForCapture("Dark");
             RenderPng(window, Path.Combine(outputDirectory, "review-compact-dark.png"));
+            window.ExpandCompactControlsForEvidence();
+            await Task.Delay(100);
+            window.ShowCompactBalancesForEvidence();
+            await Task.Delay(100);
+            window.SetThemeForCapture("Light");
+            RenderPng(window, Path.Combine(outputDirectory, "review-compact-balances-light.png"));
+            window.SetThemeForCapture("Dark");
+            RenderPng(window, Path.Combine(outputDirectory, "review-compact-balances-dark.png"));
+            window.ScrollCompactControlsToEndForEvidence();
+            await Task.Delay(100);
+            window.SetThemeForCapture("Light");
+            RenderPng(window, Path.Combine(outputDirectory, "review-compact-rules-light.png"));
+            window.SetThemeForCapture("Dark");
+            RenderPng(window, Path.Combine(outputDirectory, "review-compact-rules-dark.png"));
             object compactLayout = window.ReviewLayoutEvidence();
 
             window.Width = 1320;

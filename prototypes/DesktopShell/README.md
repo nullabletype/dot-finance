@@ -77,7 +77,7 @@ Generated outputs include:
 - `artifacts/desktop/`: framework-dependent application and synthetic fixture;
 - `artifacts/architecture/`: interactive experimental architecture site;
 - `artifacts/persistence-local/`: encrypted files and local round-trip evidence;
-- `artifacts/workflow-local/`: six responsive theme screenshots plus expected/actual guided-workflow evidence;
+- `artifacts/workflow-local/`: ten responsive theme screenshots plus expected/actual guided-workflow evidence, including compact balance and rule panels;
 - `artifacts/offline-network/`: Linux blocked-network trace in CI;
 - `artifacts/launch-*/` and `artifacts/build.json`: native launch and tested-source metadata.
 
