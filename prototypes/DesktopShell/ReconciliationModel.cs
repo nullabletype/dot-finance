@@ -59,7 +59,21 @@ public sealed record Transaction(
     string LinkedTransactionId,
     FundingSource? FundingSource,
     bool Settled,
-    bool RequiresReview);
+    bool RequiresReview,
+    decimal? ActualGbpAmount = null);
+
+/// <summary>A changed locked or settled transaction awaiting an explicit adjustment decision.</summary>
+public sealed record PendingTransactionCorrection(Transaction Original, Transaction Updated);
+
+/// <summary>The outcome of importing a transaction fixture into the current workflow.</summary>
+public readonly record struct ImportResult(int Added, int Skipped, int Updated, int CorrectionsQueued)
+{
+    public void Deconstruct(out int added, out int skipped)
+    {
+        added = Added;
+        skipped = Skipped;
+    }
+}
 
 /// <summary>A planned transfer to be performed outside the app and acknowledged manually.</summary>
 public sealed record Transfer(string Source, TransferKind Kind, decimal Amount, bool Acknowledged);
@@ -86,4 +100,7 @@ public sealed record ScenarioState(
     IReadOnlyDictionary<string, FundingSource> Overrides,
     ReconciliationDraft? Draft,
     IReadOnlyList<ReconciliationDraft> CompletedReconciliations,
-    string ThemePreference);
+    string ThemePreference,
+    IReadOnlyList<PendingTransactionCorrection>? PendingCorrections = null,
+    IReadOnlyDictionary<string, Transaction>? AcceptedCorrectionBaselines = null,
+    bool HasNewerReconciliationActivity = false);

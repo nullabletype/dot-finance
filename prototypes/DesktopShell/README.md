@@ -32,6 +32,10 @@ Development restore requires package-registry access. The published app itself h
 9. For the refund path, restart and import only **refund demo**: the £150 refund against a £100 Joint purchase produces a £50 outgoing reimbursement. For the shortfall path, lower Joint below the £450 required amount; its acknowledgement is labelled Blocked and completion remains unavailable.
 10. Switch System, Light, and Dark themes. The selection persists across restarts independently of the encrypted scenario.
 
+Unresolved review items block every transfer acknowledgement and the final card acknowledgement. After **Card paid**, queued imports become the next editable draft while the settled record remains under History. The latest completion can be reopened only before any newer reconciliation activity; reopening changes the local record and never implies that an external transfer was reversed.
+
+Re-importing an unchanged ID remains a duplicate. A changed ID updates an unlocked draft, but a changed locked or settled ID leaves the frozen record untouched and is retained for explicit review in the next draft. Accepting it creates a reversal of the preserved original plus a replacement from the corrected import, so category and amount changes become a net adjustment without rewriting history. The fictional `synthetic-non-gbp.csv` fixture remains in review until a signed actual GBP amount is entered; that GBP value, not the foreign amount, drives the draft totals. No conversion is attempted.
+
 `npm run workflow:smoke` repeats the calculation path and captures Light and Dark Review screenshots before and after accepting the `R-0005` correction, plus the compact-window layout in both themes. Its JSON records expected and actual base, correction, £60 bill, refund, duplicate, insufficient-funds, and responsive containment outcomes. This evidence supports the owner walkthrough; it does not replace the required owner accept/revise decision.
 
 ## Persistence design under test
@@ -73,7 +77,7 @@ Generated outputs include:
 - `artifacts/desktop/`: framework-dependent application and synthetic fixture;
 - `artifacts/architecture/`: interactive experimental architecture site;
 - `artifacts/persistence-local/`: encrypted files and local round-trip evidence;
-- `artifacts/workflow-local/`: six responsive theme screenshots plus expected/actual guided-workflow evidence;
+- `artifacts/workflow-local/`: ten responsive theme screenshots plus expected/actual guided-workflow evidence, including compact balance and rule panels;
 - `artifacts/offline-network/`: Linux blocked-network trace in CI;
 - `artifacts/launch-*/` and `artifacts/build.json`: native launch and tested-source metadata.
 
@@ -81,4 +85,4 @@ Byte-pattern inspection inventories every file in the app-managed scenario works
 
 ## Current decision
 
-Decision (#12): SQLite3MC is selected as the maintained replacement for the deprecated SQLCipher bundle. Retain this vault seam for the guided-workflow experiment; rework is still required before production use. The owner accepted the guided workflow direction on 2026-09-26; independent review remains pending. The prototype does not establish password recovery, production migrations, large-dataset behavior, packaging/signing, final security suitability, or production UI architecture.
+Decision (#12): SQLite3MC is selected as the maintained replacement for the deprecated SQLCipher bundle. Retain this vault seam for the guided-workflow experiment; rework is still required before production use. The owner accepted the guided workflow direction on 2026-09-26. The first independent review on 2026-09-27 found four workflow gaps tracked by #25; the bounded repair and follow-up edge cases now have clean independent re-reviews, while fresh hosted exact-commit evidence remains required before the issue #5 decision gate. The prototype does not establish password recovery, production migrations, large-dataset behavior, packaging/signing, final security suitability, or production UI architecture.
