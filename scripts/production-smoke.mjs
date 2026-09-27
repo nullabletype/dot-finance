@@ -39,6 +39,7 @@ launch('cold');
 const cold = inventory();
 const skia = cold.find(file => /SkiaSharp/.test(file.path));
 if (!skia) throw new Error('Native extraction was not exercised');
+if (!cold.some(file => /sqlite3mc/i.test(file.path))) throw new Error('SQLite3MC native extraction was not exercised');
 launch('warm');
 if (JSON.stringify(inventory()) !== JSON.stringify(cold)) throw new Error('Warm launch replaced existing native files');
 unlinkSync(join(extraction, skia.path));

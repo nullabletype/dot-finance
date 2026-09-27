@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsTrimmable>true</IsTrimmable>
+    <DebugType>embedded</DebugType>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../DotFinance.Domain/DotFinance.Domain.csproj" />
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.12" />
+    <PackageReference Include="SQLite3MC.PCLRaw.bundle" Version="2.4.0" />
+    <PackageReference Include="SQLitePCLRaw.core" Version="3.0.5" />
+  </ItemGroup>
+</Project>

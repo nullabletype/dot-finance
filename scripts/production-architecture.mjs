@@ -6,7 +6,8 @@ import { pathToFileURL } from 'node:url';
 const rules = {
   'DotFinance.Domain': { references: [], packages: ['Microsoft.NET.ILLink.Tasks'] },
   'DotFinance.Application': { references: ['DotFinance.Domain'], packages: ['Microsoft.NET.ILLink.Tasks'] },
-  'DotFinance.Desktop': { references: ['DotFinance.Application'], packages: ['Microsoft.NET.ILLink.Tasks', 'Avalonia.Desktop', 'Avalonia.Themes.Fluent', 'SkiaSharp', 'SkiaSharp.NativeAssets.Linux', 'SkiaSharp.NativeAssets.WebAssembly', 'HarfBuzzSharp', 'HarfBuzzSharp.NativeAssets.Linux', 'HarfBuzzSharp.NativeAssets.WebAssembly', 'Tmds.DBus.Protocol'] }
+  'DotFinance.Storage': { references: ['DotFinance.Domain'], packages: ['Microsoft.NET.ILLink.Tasks', 'Microsoft.Data.Sqlite.Core', 'SQLite3MC.PCLRaw.bundle', 'SQLitePCLRaw.core'] },
+  'DotFinance.Desktop': { references: ['DotFinance.Application', 'DotFinance.Storage'], packages: ['Microsoft.NET.ILLink.Tasks', 'Avalonia.Desktop', 'Avalonia.Themes.Fluent', 'SkiaSharp', 'SkiaSharp.NativeAssets.Linux', 'SkiaSharp.NativeAssets.WebAssembly', 'HarfBuzzSharp', 'HarfBuzzSharp.NativeAssets.Linux', 'HarfBuzzSharp.NativeAssets.WebAssembly', 'Tmds.DBus.Protocol'] }
 };
 const projectPath = name => `src/${name}/${name}.csproj`;
 

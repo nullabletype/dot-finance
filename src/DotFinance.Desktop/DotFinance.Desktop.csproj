@@ -13,6 +13,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../DotFinance.Application/DotFinance.Application.csproj" />
+    <ProjectReference Include="../DotFinance.Storage/DotFinance.Storage.csproj" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.3" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.3" />
   </ItemGroup>
