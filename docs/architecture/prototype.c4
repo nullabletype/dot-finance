@@ -71,7 +71,7 @@ model {
 views {
   view index {
     title 'EXPERIMENTAL — offline desktop and encrypted persistence'
-    include *
+    include user, prototype, localfiles, build, controller, runfiles, tracker
   }
   view shell of prototype {
     title 'EXPERIMENTAL — implemented shell and persistence components'

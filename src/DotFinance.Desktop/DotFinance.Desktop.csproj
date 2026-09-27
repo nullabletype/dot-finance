@@ -17,4 +17,10 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.3" />
   </ItemGroup>
   <Import Project="../../build/DesktopDependencies.props" />
+  <!-- Native package PDBs are optional debugger data, not runtime dependencies. -->
+  <Target Name="ExcludeNativePackageSymbolsFromPublish" AfterTargets="ComputeResolvedFilesToPublishList" Condition="'$(PublishSingleFile)' == 'true'">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(ResolvedFileToPublish.Extension)' == '.pdb' And ('%(ResolvedFileToPublish.Filename)' == 'libSkiaSharp' Or '%(ResolvedFileToPublish.Filename)' == 'libHarfBuzzSharp')" />
+    </ItemGroup>
+  </Target>
 </Project>

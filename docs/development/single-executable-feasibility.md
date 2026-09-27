@@ -34,7 +34,7 @@ Run from the repository root on macOS arm64. These commands build a disposable p
 dotnet publish prototypes/SingleExecutableProbe/Probe.csproj -c Release -r osx-arm64 -p:RestoreLockedMode=true -o artifacts/single-executable/aot
 artifacts/single-executable/aot/Probe
 
-dotnet publish prototypes/SingleExecutableProbe/Probe.csproj -c Release -r osx-arm64 -p:RestoreLockedMode=true -p:PublishAot=false -p:PublishSingleFile=true -p:SelfContained=true -p:PublishTrimmed=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=embedded -o artifacts/single-executable/bundled
+dotnet publish prototypes/SingleExecutableProbe/Probe.csproj -c Release -r osx-arm64 --no-restore -p:PublishAot=false -p:PublishSingleFile=true -p:SelfContained=true -p:PublishTrimmed=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=embedded -o artifacts/single-executable/bundled
 DOTNET_BUNDLE_EXTRACT_BASE_DIR="$PWD/artifacts/single-executable/extracted" artifacts/single-executable/bundled/Probe
 ```
 
