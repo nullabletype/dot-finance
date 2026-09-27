@@ -57,7 +57,7 @@ jobs:
           elif [[ "$EVENT_NAME" == "pull_request" && "$REVIEW_READY" == "true" ]]; then
             full_validation=true
             changed_paths="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
-            if grep -Eq '^(\.github/workflows/prototype\.yml|global\.json|Directory\.Build\.props|DotFinance\.slnx|package(-lock)?\.json|build/DesktopDependencies\.props|scripts/(build|persistence-smoke|production-build|production-smoke|production-vault-smoke)\.mjs|prototypes/DesktopShell/|prototypes/DesktopShell\.Tests/|src/[^/]+/([^/]+\.csproj|packages\.lock\.json)|src/.*(Backup|Infrastructure|Persistence|Storage|Vault))' <<< "$changed_paths"; then
+            if grep -Eq '^(\.github/workflows/prototype\.yml|global\.json|Directory\.Build\.props|DotFinance\.slnx|package(-lock)?\.json|build/DesktopDependencies\.props|scripts/(build|persistence-smoke|production-build|production-smoke|production-vault-smoke)\.mjs|prototypes/DesktopShell/|prototypes/DesktopShell\.Tests/|src/DotFinance\.Storage/|tests/DotFinance\.Storage\.Tests/|src/[^/]+/([^/]+\.csproj|packages\.lock\.json)|src/.*(Backup|Infrastructure|Persistence|Storage|Vault))' <<< "$changed_paths"; then
               persistence_validation=true
             fi
           fi
