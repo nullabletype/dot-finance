@@ -29,7 +29,7 @@ The atomic JSON checkpoint holds issue, branch, commit, current gate, next actio
 
 One exclusive `writer.lock` prevents concurrent local writers. After an interrupted process, verify that the PID in the lock is dead before removing the lock. Resume discards interrupted gate progress and conservatively charges time since the pre-command checkpoint. Normal idle/human-review time between commands is not charged. Unknown downtime after a crash may therefore stop early rather than grant extra budget. Local filesystem rename and flush provide process-interruption protection, not a demonstrated power-loss guarantee.
 
-A separate supervisor monitors controller liveness and the remaining deadline, terminating the validation process group on macOS/Linux, or using `taskkill /t /f` on Windows. The interruption experiment kills the controller **while a fixture is running**, then verifies the supervisor killed it. A deadline experiment starts a child and grandchild and checks both are gone. Windows and Linux supervision remain pending until the configured hosted executions pass for the tested commit. Killing the supervisor itself, escaped process groups, or hostile child processes are outside this trusted-process experiment; unattended use remains no-go.
+A separate supervisor monitors controller liveness and the remaining deadline, terminating the validation process group on macOS/Linux, or using `taskkill /t /f` on Windows. The interruption experiment kills the controller **while a fixture is running**, then verifies the supervisor killed it. A deadline experiment starts a child and grandchild and checks both are gone. The configured hosted trial exercises this recovery on macOS, Windows and Linux for the tested commit. Killing the supervisor itself, escaped process groups, or hostile child processes are outside this trusted-process experiment; unattended use remains no-go.
 
 The pull-request workflow runs the adversarial trial on macOS, Windows and Ubuntu without retaining its scratch state or transcript as a GitHub Actions artifact. Platform evidence applies only to the exact commit after those hosted jobs pass; the workflow definition alone is not evidence.
 
@@ -37,10 +37,18 @@ This experiment assumes the operator and scratch directory are trusted. A malici
 
 ## Tracker and permissions
 
-Issue [#10](https://github.com/nullabletype/dot-finance/issues/10) is the explicitly designated synthetic tracker sandbox. Only a marked comment and Project 2 Todo/In Progress status may be changed by a tracker trial. Issue #4 remains the work record. A tracker write adapter is pending a verified least-privilege credential: repository Issues read/write for this repository, Project 2 read/write, and metadata read. No contents write, Actions write, merge, or release permission is needed. Prefer a narrowly scoped GitHub App installation; classic `repo` tokens are not least privilege. Never put credentials in state, transcripts, command arguments or logs.
+Issue [#10](https://github.com/nullabletype/dot-finance/issues/10) is the explicitly designated synthetic tracker sandbox. Only its single marked comment and Project 2 Todo/In Progress status may be changed by a tracker trial. Issue #4 remains the work record. The manual adapter uses the operator's existing authenticated `gh` session only after explicit owner authorisation. It is structurally fixed to repository `nullabletype/dot-finance`, issue #10, user Project 2 and those two statuses; it accepts no alternate repository, issue, project, comment or status arguments.
 
-Tracker retries must reconcile the marked comment and current board status before repeating writes; ambiguous outcomes must remain pending. This first local harness does not claim that distributed write recovery is validated.
+The current operator session has broader permissions than this trial needs, so it is not a least-privilege security boundary and must not be represented as one. The adapter never reads, accepts, stores or logs a credential. A future unattended controller requires a genuinely isolated environment in which broader stored `gh` authentication is unavailable and only a narrowly scoped credential is present.
+
+`npm run controller:trial` includes an offline fake-GitHub regression for both ambiguous writes. With the owner authorisation recorded on #4 and a clean #10 in Todo, run the live exercise explicitly:
+
+```sh
+DOT_FINANCE_TRACKER_TRIAL=issue-10 npm run controller:tracker:live
+```
+
+The live trial creates the one marked comment, deliberately treats the successful comment response as lost, reconciles it, moves the Project item to In Progress, deliberately treats that response as lost, then proves a retry performs no duplicate writes. It returns #10 to Todo and leaves the marked evidence comment. Its local transcript contains remote state and mutation names, never credentials. Any unexpected issue state, duplicate marker or Project status fails closed for owner review.
 
 ## Decision
 
-Recommendation and tested-commit evidence are recorded on #4 after execution and independent review. Until the tracker permission/recovery trial, actual independent-review rejection routing and dependency support audit are complete, the result is **no-go for unattended execution**. This prototype cannot advance the production queue or promote issues.
+Recommendation and tested-commit evidence are recorded on #4 after execution and independent review. Passing the manual tracker recovery trial does not approve unattended execution. This prototype cannot advance the production queue or promote issues.
