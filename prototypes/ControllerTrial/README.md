@@ -51,4 +51,4 @@ The live trial runs the comment and Project response-loss phases in separate chi
 
 ## Decision
 
-Recommendation and tested-commit evidence are recorded on #4 after execution and independent review. Passing the manual tracker recovery trial does not approve unattended execution. This prototype cannot advance the production queue or promote issues.
+The owner accepted the recommendation from #4 at the issue #5 decision gate: retain this bounded, manually invoked development aid only. Passing the manual tracker recovery trial does not approve unattended execution, automatic merge, or release. This prototype cannot advance the production queue or promote issues. Any future unattended controller requires its own explicit security and policy decision after validation in an isolated environment containing only a narrowly scoped credential.

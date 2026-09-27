@@ -133,4 +133,4 @@ Use GitHub Issues and a GitHub Project for development ticketing. Use LikeC4 for
 
 The requirements above capture the refinement decisions. Confirm shared understanding before beginning implementation planning.
 
-The desktop framework, database and encryption libraries, parser details, and implementation structure remain planning decisions.
+ADR-0001 selects SQLite3MC-backed encrypted SQLite and ADR-0002 selects Avalonia on .NET for production planning. Parser details and the production implementation structure remain planning decisions; the committed synthetic CSV assumptions are not evidence of Emma's actual export format.
