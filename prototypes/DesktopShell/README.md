@@ -32,7 +32,7 @@ Development restore requires package-registry access. The published app itself h
 9. For the refund path, restart and import only **refund demo**: the £150 refund against a £100 Joint purchase produces a £50 outgoing reimbursement. For the shortfall path, lower Joint below the £450 required amount; its acknowledgement is labelled Blocked and completion remains unavailable.
 10. Switch System, Light, and Dark themes. The selection persists across restarts independently of the encrypted scenario.
 
-`npm run workflow:smoke` repeats the calculation path and captures Light and Dark Review screenshots before and after accepting the `R-0005` correction, plus a compact-window layout. Its JSON records expected and actual base, correction, £60 bill, refund, duplicate, insufficient-funds, and responsive containment outcomes. This evidence supports the owner walkthrough; it does not replace the required owner accept/revise decision.
+`npm run workflow:smoke` repeats the calculation path and captures Light and Dark Review screenshots before and after accepting the `R-0005` correction, plus the compact-window layout in both themes. Its JSON records expected and actual base, correction, £60 bill, refund, duplicate, insufficient-funds, and responsive containment outcomes. This evidence supports the owner walkthrough; it does not replace the required owner accept/revise decision.
 
 ## Persistence design under test
 
@@ -73,7 +73,7 @@ Generated outputs include:
 - `artifacts/desktop/`: framework-dependent application and synthetic fixture;
 - `artifacts/architecture/`: interactive experimental architecture site;
 - `artifacts/persistence-local/`: encrypted files and local round-trip evidence;
-- `artifacts/workflow-local/`: five responsive theme screenshots plus expected/actual guided-workflow evidence;
+- `artifacts/workflow-local/`: six responsive theme screenshots plus expected/actual guided-workflow evidence;
 - `artifacts/offline-network/`: Linux blocked-network trace in CI;
 - `artifacts/launch-*/` and `artifacts/build.json`: native launch and tested-source metadata.
 
