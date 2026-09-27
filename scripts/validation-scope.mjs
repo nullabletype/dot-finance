@@ -7,7 +7,12 @@ const persistenceSensitive = [
   /^build\/DesktopDependencies\.props$/,
   /^scripts\/(?:build|persistence-smoke|production-build|production-smoke|production-vault-smoke)\.mjs$/,
   /^prototypes\/DesktopShell(?:\.Tests)?\//,
-  /^src\//,
+  /^src\/DotFinance\.Storage\//,
+  /^src\/DotFinance\.Application\/ReconciliationCompletion\.cs$/,
+  /^src\/DotFinance\.Domain\/ReconciliationBook\.cs$/,
+  /^src\/DotFinance\.Desktop\/(?:Program|StorageScenario|StorageScenarioJsonContext)\.cs$/,
+  /^src\/[^/]+\/(?:[^/]+\.csproj|packages\.lock\.json)$/,
+  /^src\/.*(?:Backup|Infrastructure|Persistence|Storage|Vault).*\.cs$/,
   /^tests\/DotFinance\.Storage\.Tests\//,
 ];
 

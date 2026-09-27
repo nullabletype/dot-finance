@@ -15,10 +15,12 @@ test('keeps routine pushes and unreviewed pull requests on the deterministic cor
 });
 
 test('runs native validation without persistence for reviewed documentation', () => {
-  assert.deepEqual(selectValidationScope({ eventName: 'pull_request', reviewReady: true, changedPaths: ['README.md'] }), {
-    fullValidation: true,
-    persistenceValidation: false,
-  });
+  for (const path of ['README.md', 'src/DotFinance.Desktop/App.cs']) {
+    assert.deepEqual(selectValidationScope({ eventName: 'pull_request', reviewReady: true, changedPaths: [path] }), {
+      fullValidation: true,
+      persistenceValidation: false,
+    }, path);
+  }
 });
 
 test('runs persistence for reviewed workflow, production contract, and storage-test changes', () => {
@@ -46,4 +48,11 @@ test('honours manual native and persistence choices independently', () => {
 test('ignores unrelated label additions after a pull request enters review', () => {
   const workflow = readFileSync('.github/workflows/prototype.yml', 'utf8');
   assert.match(workflow, /if: \$\{\{ github\.event\.action != 'labeled' \|\| github\.event\.label\.name == 'in-review' \}\}/u);
+  assert.match(workflow, /group: \$\{\{ github\.workflow \}\}-\$\{\{ github\.event\.action == 'labeled' && github\.event\.label\.name != 'in-review' && github\.run_id \|\| github\.event\.pull_request\.number \|\| github\.ref \}\}/u);
+});
+
+test('runs every architecture policy test in the deterministic production build', () => {
+  const productionBuild = readFileSync('scripts/production-build.mjs', 'utf8');
+  assert.match(productionBuild, /readdirSync\('tests\/Architecture'\)/u);
+  assert.match(productionBuild, /\['--test', \.\.\.architectureTests\]/u);
 });

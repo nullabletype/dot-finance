@@ -25,7 +25,11 @@ run('dotnet', ['test', '--project', 'tests/DotFinance.Storage.Tests/DotFinance.S
 run('dotnet', ['format', 'DotFinance.slnx', '--verify-no-changes', '--no-restore', '--severity', 'info']);
 run(process.execPath, ['scripts/production-architecture.mjs']);
 run(process.execPath, ['scripts/domain-mutations.mjs']);
-run(process.execPath, ['--test', 'tests/Architecture/production-architecture.test.mjs']);
+const architectureTests = readdirSync('tests/Architecture')
+  .filter(name => name.endsWith('.test.mjs'))
+  .sort()
+  .map(name => `tests/Architecture/${name}`);
+run(process.execPath, ['--test', ...architectureTests]);
 rmSync(output, { recursive: true, force: true });
 run('dotnet', ['publish', 'src/DotFinance.Desktop/DotFinance.Desktop.csproj', '--no-restore', '-c', 'Release', '-r', rid, '--warnaserror', '-o', output]);
 const files = readdirSync(output);
