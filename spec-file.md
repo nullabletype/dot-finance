@@ -10,7 +10,7 @@ Absolutely no internet calls: no financial-institution connections, payment init
 
 ## Application distribution
 
-Ship a single native application executable per supported platform/CPU target, without separately distributed application DLLs or native-library sidecars and without requiring a separate .NET installation. Separate source projects are permitted for organisation and boundary enforcement. Remove unused code through trimming/tree shaking where safely supported and verified against the published application. Verify the native dependency strategy early; any runtime-extraction fallback or macOS bundle accommodation requires an explicit decision rather than silently weakening the single-executable requirement.
+Ship one self-contained application executable per supported platform/CPU target, without separately distributed application DLLs or native-library sidecars and without requiring a separate .NET installation. The owner approved single-file bundling with private runtime extraction of native libraries; fully native AOT compilation is optional. Separate source projects are permitted for organisation and boundary enforcement. Remove unused code through trimming/tree shaking where safely supported and verified against the published application. Verify the native dependency strategy early; verify runtime extraction on each platform. Any macOS bundle accommodation remains an explicit packaging decision.
 
 ## Accounts and allocation rules
 
