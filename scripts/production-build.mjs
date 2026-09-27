@@ -1,0 +1,42 @@
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { resolve } from 'node:path';
+
+function run(command, args, capture = false) {
+  const result = spawnSync(command, args, { encoding: 'utf8', stdio: capture ? 'pipe' : 'inherit' });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`${command} failed (${result.status}): ${result.stderr ?? ''}`);
+  return result.stdout?.trim();
+}
+const os = { darwin: 'osx', linux: 'linux', win32: 'win' }[process.platform];
+const rid = `${os}-${process.arch}`;
+if (!['osx-arm64', 'osx-x64', 'win-x64', 'linux-x64'].includes(rid)) throw new Error(`Unvalidated build target: ${rid}`);
+const executable = `DotFinance.Desktop${process.platform === 'win32' ? '.exe' : ''}`;
+const output = resolve('artifacts', 'production', rid);
+const receipt = 'artifacts/production-build.json';
+rmSync(receipt, { force: true });
+const commit = run('git', ['rev-parse', 'HEAD'], true);
+const status = run('git', ['status', '--porcelain', '--untracked-files=all'], true);
+run('dotnet', ['restore', 'DotFinance.slnx', '--locked-mode']);
+run('dotnet', ['build', 'DotFinance.slnx', '--no-restore', '-c', 'Release', '--warnaserror']);
+run('dotnet', ['format', 'DotFinance.slnx', '--verify-no-changes', '--no-restore', '--severity', 'info']);
+run(process.execPath, ['scripts/production-architecture.mjs']);
+run(process.execPath, ['--test', 'tests/Architecture/production-architecture.test.mjs']);
+rmSync(output, { recursive: true, force: true });
+run('dotnet', ['publish', 'src/DotFinance.Desktop/DotFinance.Desktop.csproj', '--no-restore', '-c', 'Release', '-r', rid, '--warnaserror', '-o', output]);
+const files = readdirSync(output);
+if (files.length !== 1 || files[0] !== executable) throw new Error(`Expected one executable; found: ${files.join(', ')}`);
+if (commit !== run('git', ['rev-parse', 'HEAD'], true) || status !== run('git', ['status', '--porcelain', '--untracked-files=all'], true)) throw new Error('Source changed during production build');
+const updateOutput = resolve('artifacts', 'production-update', rid);
+rmSync(updateOutput, { recursive: true, force: true });
+run('dotnet', ['publish', 'src/DotFinance.Desktop/DotFinance.Desktop.csproj', '--no-restore', '-c', 'Release', '-r', rid, '--warnaserror', '-p:Version=0.0.0-extraction-check', '-o', updateOutput]);
+if (readdirSync(updateOutput).join() !== executable) throw new Error('Update probe contains sidecars');
+const updateBinary = readFileSync(resolve(updateOutput, executable));
+const updateSha256 = createHash('sha256').update(updateBinary).digest('hex');
+const binary = readFileSync(resolve(output, executable));
+if (createHash('sha256').update(binary).digest('hex') === updateSha256) throw new Error('Update probe is not a distinct bundle');
+if (commit !== run('git', ['rev-parse', 'HEAD'], true) || status !== run('git', ['status', '--porcelain', '--untracked-files=all'], true)) throw new Error('Source changed during update probe');
+mkdirSync('artifacts', { recursive: true });
+writeFileSync(receipt, JSON.stringify({ commit, dirty: status !== '', rid, executable, updateSha256, bytes: binary.length, sha256: createHash('sha256').update(binary).digest('hex') }, null, 2));
+console.log(`PASS: single-file production publish for ${rid}: ${binary.length} bytes`);
