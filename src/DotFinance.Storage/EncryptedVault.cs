@@ -37,6 +37,12 @@ public sealed class EncryptedVault : IDisposable, IReconciliationVault
         IProgress<VaultStage>? progress = null, CancellationToken cancellationToken = default)
         => Restore(backupPath, databasePath, password, progress, VaultDependencies.Default, cancellationToken);
 
+    public static void DiscardInterruptedRestore(string databasePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
+        DeleteManagedSet(PhysicalVaultFileSystem.Instance, Path.GetFullPath(databasePath) + ".restore-partial");
+    }
+
     internal static EncryptedVault Create(string databasePath, ReadOnlySpan<char> password, VaultDependencies dependencies)
     {
         ValidatePathAndPassword(databasePath, password);
@@ -263,22 +269,30 @@ public sealed class EncryptedVault : IDisposable, IReconciliationVault
                     id INTEGER PRIMARY KEY CHECK (id = 1),
                     state_version INTEGER NOT NULL,
                     adjustment_sequence INTEGER NOT NULL,
-                    configuration BLOB NOT NULL,
-                    rules BLOB NOT NULL,
+                    card_account_id TEXT NOT NULL,
                     current BLOB
                 ) STRICT;
-                CREATE TABLE imported_transactions (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
+                CREATE TABLE funding_accounts (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL, role INTEGER, protected_minimum_minor INTEGER, priority INTEGER) STRICT;
+                CREATE TABLE category_rules (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL, funding_source INTEGER) STRICT;
+                CREATE TABLE subcategory_rules (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL, category TEXT, subcategory TEXT, funding_source INTEGER) STRICT;
+                CREATE TABLE reporting_categories (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL, category TEXT, subcategory TEXT, funding_source INTEGER) STRICT;
+                CREATE TABLE imported_transactions (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL, transaction_date TEXT, amount_decimal TEXT, currency TEXT, category TEXT, subcategory TEXT, transaction_kind INTEGER) STRICT;
                 CREATE TABLE settled_transaction_ids (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
-                CREATE TABLE effective_transactions (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
+                CREATE TABLE effective_transactions (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL, funding_source INTEGER, cost_minor INTEGER, card_cost_minor INTEGER, eligible INTEGER) STRICT;
                 CREATE TABLE pending_corrections (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
                 CREATE TABLE import_conflicts (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
                 CREATE TABLE funding_overrides (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
-                CREATE TABLE reconciliation_history (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
-                CREATE TABLE accepted_corrections (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
+                CREATE TABLE reconciliation_history (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL, reconciliation_date TEXT, locked INTEGER, card_paid INTEGER) STRICT;
+                CREATE TABLE accepted_corrections (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL, reconciliation_id TEXT, sequence INTEGER, transaction_id TEXT) STRICT;
                 CREATE TABLE used_reconciliation_ids (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
                 CREATE TABLE current_adjustments (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
                 CREATE TABLE active_transaction_ids (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
                 CREATE TABLE settled_baseline (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
+                CREATE INDEX imported_transactions_date_idx ON imported_transactions(transaction_date);
+                CREATE INDEX imported_transactions_category_idx ON imported_transactions(category, subcategory);
+                CREATE INDEX effective_transactions_source_idx ON effective_transactions(funding_source);
+                CREATE INDEX reconciliation_history_date_idx ON reconciliation_history(reconciliation_date);
+                CREATE INDEX accepted_corrections_transaction_idx ON accepted_corrections(transaction_id);
                 INSERT INTO schema_history (version, description) VALUES (1, 'Relational encrypted reconciliation state');
                 PRAGMA user_version = 1;
                 """;

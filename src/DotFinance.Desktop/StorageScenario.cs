@@ -27,6 +27,7 @@ internal static class StorageScenario
                 ["--vault-cycle", string mode, string workspace, string inputBackup] => Cycle(mode, workspace, inputBackup, password),
                 ["--vault-interrupt", string operation, string workspace] => Interrupt(operation, workspace, password),
                 ["--vault-recovery", string workspace] => Recovery(workspace, password),
+                ["--vault-verify-restored", string workspace] => VerifyRestored(workspace, password),
                 _ => Usage()
             };
         }
@@ -130,6 +131,16 @@ internal static class StorageScenario
         InspectManagedFiles(workspace, password);
         WriteReceipt(workspace, "recovery", database, profile);
         return 0;
+    }
+
+    private static int VerifyRestored(string workspace, ReadOnlySpan<char> password)
+    {
+        string restored = Path.Combine(workspace, "restored.db");
+        using (EncryptedVault vault = EncryptedVault.Unlock(restored, password)) AssertExpected(vault.Load());
+        EncryptedVault.DiscardInterruptedRestore(restored);
+        return File.Exists(restored + ".restore-partial")
+            ? throw new InvalidDataException("An interrupted restore candidate could not be discarded.")
+            : 0;
     }
 
     private static ReconciliationBook RepresentativeBook()

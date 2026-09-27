@@ -7,7 +7,8 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        if (args is ["--vault-cycle", ..] or ["--vault-interrupt", ..] or ["--vault-recovery", ..])
+        if (args is ["--vault-cycle", ..] or ["--vault-interrupt", ..] or ["--vault-recovery", ..]
+            or ["--vault-verify-restored", ..])
         {
             return StorageScenario.Run(args);
         }

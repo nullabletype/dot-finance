@@ -53,7 +53,8 @@ public sealed class EncryptedVaultTests : IDisposable
         Assert.Equal(1L, Scalar(connection, "PRAGMA user_version;"));
         Assert.Equal(1L, Scalar(connection, "SELECT count(*) FROM schema_history WHERE version = 1;"));
         Assert.Equal(1L, Scalar(connection, "SELECT count(*) FROM sqlite_schema WHERE name = 'book_state' AND type = 'table';"));
-        Assert.Equal(12L, Scalar(connection, "SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name IN ('imported_transactions', 'settled_transaction_ids', 'effective_transactions', 'pending_corrections', 'import_conflicts', 'funding_overrides', 'reconciliation_history', 'accepted_corrections', 'used_reconciliation_ids', 'current_adjustments', 'active_transaction_ids', 'settled_baseline');"));
+        Assert.Equal(16L, Scalar(connection, "SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name IN ('funding_accounts', 'category_rules', 'subcategory_rules', 'reporting_categories', 'imported_transactions', 'settled_transaction_ids', 'effective_transactions', 'pending_corrections', 'import_conflicts', 'funding_overrides', 'reconciliation_history', 'accepted_corrections', 'used_reconciliation_ids', 'current_adjustments', 'active_transaction_ids', 'settled_baseline');"));
+        Assert.Equal(5L, Scalar(connection, "SELECT count(*) FROM sqlite_schema WHERE type = 'index' AND name LIKE '%_idx';"));
     }
 
     [Fact]
@@ -61,15 +62,10 @@ public sealed class EncryptedVaultTests : IDisposable
     {
         string database = FilePath("working.db");
         string backup = FilePath("automatic.dotfinance-backup");
-        ReconciliationBook book = StorageFixtures.RepresentativeBook();
-        book.RejectCorrection("baseline-2");
-        book.ResolveImportConflict("duplicate-1", book.ImportConflicts.Single().Candidates[0]);
-        if (!book.Current!.DiscrepancyAcknowledged) book.AcknowledgeDiscrepancy();
-        foreach (FundingTransfer transfer in book.Current.Transfers.Where(value => !value.Acknowledged).ToArray())
-            book.AcknowledgeTransfer(transfer.AccountId);
+        ReconciliationBook book = ReadyToCompleteBook();
 
         using EncryptedVault vault = EncryptedVault.Create(database, StorageFixtures.Password);
-        new ReconciliationCompletion(vault, backup).Complete(book, TestContext.Current.CancellationToken);
+        book = new ReconciliationCompletion(vault, backup).Complete(book, TestContext.Current.CancellationToken);
 
         Assert.Null(book.Current);
         Assert.True(File.Exists(backup));
@@ -78,6 +74,55 @@ public sealed class EncryptedVaultTests : IDisposable
         EncryptedVault.Restore(backup, restored, StorageFixtures.Password,
             cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(StorageFixtures.CanonicalState(book), ReadState(restored));
+
+        using SqliteConnection relational = OpenRaw(database);
+        Assert.Equal(1L, Scalar(relational, "SELECT count(*) FROM imported_transactions WHERE item_key = 'baseline-1' AND transaction_date = '2026-08-01' AND category = 'Personal';"));
+        Assert.Equal(1L, Scalar(relational, "SELECT count(*) FROM effective_transactions WHERE item_key = 'active-1' AND funding_source = 2 AND eligible = 1;"));
+        Assert.Equal(2L, Scalar(relational, "SELECT count(*) FROM reconciliation_history WHERE locked = 1 AND card_paid = 1;"));
+        Assert.Equal(1L, Scalar(relational, "SELECT count(*) FROM accepted_corrections WHERE transaction_id = 'baseline-1';"));
+    }
+
+    [Fact]
+    public void CompletionFailureKeepsCallerDraftAndExposesBackupRetry()
+    {
+        ReconciliationBook draft = ReadyToCompleteBook();
+        string expectedDraft = StorageFixtures.CanonicalState(draft);
+        RecordingVault saveFailure = new() { SaveError = new IOException("Synthetic save fault") };
+        ReconciliationCompletion failedSave = new(saveFailure, FilePath("automatic.backup"));
+
+        Assert.Throws<IOException>(() => failedSave.Complete(draft, TestContext.Current.CancellationToken));
+        Assert.Equal(expectedDraft, StorageFixtures.CanonicalState(draft));
+        Assert.NotNull(draft.Current);
+        Assert.Null(saveFailure.Saved);
+
+        RecordingVault backupFailure = new() { BackupError = new IOException("Synthetic backup fault") };
+        ReconciliationCompletion completion = new(backupFailure, FilePath("automatic.backup"));
+        AutomaticBackupException exception = Assert.Throws<AutomaticBackupException>(() =>
+            completion.Complete(draft, TestContext.Current.CancellationToken));
+        Assert.Equal(expectedDraft, StorageFixtures.CanonicalState(draft));
+        Assert.Null(exception.CompletedBook.Current);
+        Assert.Equal(StorageFixtures.CanonicalState(exception.CompletedBook),
+            StorageFixtures.CanonicalState(backupFailure.Saved!));
+
+        backupFailure.BackupError = null;
+        completion.RetryAutomaticBackup(TestContext.Current.CancellationToken);
+        Assert.Equal(2, backupFailure.BackupAttempts);
+    }
+
+    [Fact]
+    public void CancelledCompletionDoesNotMutateOrPersistDraft()
+    {
+        ReconciliationBook draft = ReadyToCompleteBook();
+        string expected = StorageFixtures.CanonicalState(draft);
+        RecordingVault vault = new();
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() =>
+            new ReconciliationCompletion(vault, FilePath("automatic.backup")).Complete(draft, cancellation.Token));
+        Assert.Equal(expected, StorageFixtures.CanonicalState(draft));
+        Assert.Null(vault.Saved);
+        Assert.Equal(0, vault.BackupAttempts);
     }
 
     [Fact]
@@ -310,6 +355,17 @@ public sealed class EncryptedVaultTests : IDisposable
         return StorageFixtures.CanonicalState(vault.Load());
     }
 
+    private static ReconciliationBook ReadyToCompleteBook()
+    {
+        ReconciliationBook book = StorageFixtures.RepresentativeBook();
+        book.RejectCorrection("baseline-2");
+        book.ResolveImportConflict("duplicate-1", book.ImportConflicts.Single().Candidates[0]);
+        if (!book.Current!.DiscrepancyAcknowledged) book.AcknowledgeDiscrepancy();
+        foreach (FundingTransfer transfer in book.Current.Transfers.Where(value => !value.Acknowledged).ToArray())
+            book.AcknowledgeTransfer(transfer.AccountId);
+        return book;
+    }
+
     private static SqliteConnection OpenRaw(string path)
     {
         string dataSource = new Uri(System.IO.Path.GetFullPath(path)).AbsoluteUri
@@ -363,5 +419,27 @@ public sealed class EncryptedVaultTests : IDisposable
         public void CopyFile(string source, string destination) => _inner.CopyFile(source, destination);
         public void DeleteFile(string path) => _inner.DeleteFile(path);
         public void ReplaceFile(string source, string destination) => throw new IOException("Synthetic replacement fault");
+    }
+
+    private sealed class RecordingVault : IReconciliationVault
+    {
+        internal Exception? SaveError { get; init; }
+        internal Exception? BackupError { get; set; }
+        internal ReconciliationBook? Saved { get; private set; }
+        internal int BackupAttempts { get; private set; }
+
+        public void Save(ReconciliationBook book, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (SaveError is not null) throw SaveError;
+            Saved = book;
+        }
+
+        public void CreateBackup(string backupPath, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            BackupAttempts++;
+            if (BackupError is not null) throw BackupError;
+        }
     }
 }

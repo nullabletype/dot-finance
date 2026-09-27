@@ -16,5 +16,9 @@ namespace DotFinance.Storage;
 [JsonSerializable(typeof(ReconciliationSnapshot))]
 [JsonSerializable(typeof(AcceptedCorrection))]
 [JsonSerializable(typeof(Adjustment))]
+[JsonSerializable(typeof(FundingAccount))]
+[JsonSerializable(typeof(CategoryRule))]
+[JsonSerializable(typeof(SubcategoryRule))]
+[JsonSerializable(typeof(ReportingCategory))]
 [JsonSerializable(typeof(string))]
 internal sealed partial class VaultJsonContext : JsonSerializerContext;

@@ -11,13 +11,31 @@ public interface IReconciliationVault
 /// <summary>Commits a completed reconciliation and then refreshes its configured encrypted backup.</summary>
 public sealed class ReconciliationCompletion(IReconciliationVault vault, string automaticBackupPath)
 {
-    public void Complete(ReconciliationBook book, CancellationToken cancellationToken = default)
+    public ReconciliationBook Complete(ReconciliationBook book, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(book);
         ArgumentException.ThrowIfNullOrWhiteSpace(automaticBackupPath);
         cancellationToken.ThrowIfCancellationRequested();
-        book.AcknowledgeCardPaid();
-        vault.Save(book, cancellationToken);
-        vault.CreateBackup(automaticBackupPath, cancellationToken);
+        ReconciliationBook completed = ReconciliationBook.Restore(book.ExportState());
+        completed.AcknowledgeCardPaid();
+        vault.Save(completed, cancellationToken);
+        try
+        {
+            vault.CreateBackup(automaticBackupPath, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            throw new AutomaticBackupException(completed, exception);
+        }
+        return completed;
     }
+
+    public void RetryAutomaticBackup(CancellationToken cancellationToken = default)
+        => vault.CreateBackup(automaticBackupPath, cancellationToken);
+}
+
+public sealed class AutomaticBackupException(ReconciliationBook completedBook, Exception innerException)
+    : Exception("The reconciliation was saved, but its automatic backup could not be refreshed.", innerException)
+{
+    public ReconciliationBook CompletedBook { get; } = completedBook;
 }

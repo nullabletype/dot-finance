@@ -35,7 +35,7 @@ run(['--vault-recovery', workspace]);
 run(['--vault-interrupt', 'backup', workspace], true);
 run(['--vault-recovery', workspace]);
 run(['--vault-interrupt', 'restore', workspace], true);
-run(['--vault-recovery', workspace]);
+run(['--vault-verify-restored', workspace]);
 
 if (readdirSync(isolated).join() !== build.executable) throw new Error('Vault smoke created a distributed sidecar');
 const extracted = readdirSync(extraction, { recursive: true }).filter(path => /sqlite3mc/i.test(path));

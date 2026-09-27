@@ -15,17 +15,23 @@ internal static class VaultStateStore
     internal static ReconciliationBook Read(SqliteConnection connection)
     {
         using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = "SELECT state_version, adjustment_sequence, configuration, rules, current FROM book_state WHERE id = 1;";
+        command.CommandText = "SELECT state_version, adjustment_sequence, card_account_id, current FROM book_state WHERE id = 1;";
         using SqliteDataReader reader = command.ExecuteReader();
         if (!reader.Read() || reader.GetInt32(0) != ReconciliationBook.CurrentStateVersion)
             throw new InvalidDataException(MissingStateMessage);
         int adjustmentSequence = reader.GetInt32(1);
-        FundingConfigurationState configuration = Deserialize((byte[])reader[2], VaultJsonContext.Default.FundingConfigurationState);
-        AllocationRulesState rules = Deserialize((byte[])reader[3], VaultJsonContext.Default.AllocationRulesState);
-        ReconciliationSnapshot? current = reader.IsDBNull(4)
+        string cardAccountId = reader.GetString(2);
+        ReconciliationSnapshot? current = reader.IsDBNull(3)
             ? null
-            : Deserialize((byte[])reader[4], VaultJsonContext.Default.ReconciliationSnapshot);
+            : Deserialize((byte[])reader[3], VaultJsonContext.Default.ReconciliationSnapshot);
         reader.Close();
+
+        FundingConfigurationState configuration = new(cardAccountId,
+            ReadItems(connection, "funding_accounts", VaultJsonContext.Default.FundingAccount));
+        AllocationRulesState rules = new(
+            ReadItems(connection, "category_rules", VaultJsonContext.Default.CategoryRule),
+            ReadItems(connection, "subcategory_rules", VaultJsonContext.Default.SubcategoryRule),
+            ReadItems(connection, "reporting_categories", VaultJsonContext.Default.ReportingCategory));
 
         ReconciliationBookState state = new(ReconciliationBook.CurrentStateVersion, configuration, rules,
             ReadItems(connection, "imported_transactions", VaultJsonContext.Default.ImportedTransaction),
@@ -50,30 +56,33 @@ internal static class VaultStateStore
         {
             command.Transaction = transaction;
             command.CommandText = """
-                INSERT INTO book_state (id, state_version, adjustment_sequence, configuration, rules, current)
-                VALUES (1, $version, $sequence, $configuration, $rules, $current)
+                INSERT INTO book_state (id, state_version, adjustment_sequence, card_account_id, current)
+                VALUES (1, $version, $sequence, $cardAccountId, $current)
                 ON CONFLICT(id) DO UPDATE SET
                     state_version = excluded.state_version,
                     adjustment_sequence = excluded.adjustment_sequence,
-                    configuration = excluded.configuration,
-                    rules = excluded.rules,
+                    card_account_id = excluded.card_account_id,
                     current = excluded.current
                 WHERE state_version <> excluded.state_version
                    OR adjustment_sequence <> excluded.adjustment_sequence
-                   OR configuration <> excluded.configuration
-                   OR rules <> excluded.rules
+                   OR card_account_id <> excluded.card_account_id
                    OR current IS NOT excluded.current;
                 """;
             command.Parameters.AddWithValue("$version", state.Version);
             command.Parameters.AddWithValue("$sequence", state.AdjustmentSequence);
-            command.Parameters.AddWithValue("$configuration", Serialize(state.Configuration, VaultJsonContext.Default.FundingConfigurationState));
-            command.Parameters.AddWithValue("$rules", Serialize(state.Rules, VaultJsonContext.Default.AllocationRulesState));
+            command.Parameters.AddWithValue("$cardAccountId", state.Configuration.CardAccountId);
             command.Parameters.AddWithValue("$current", state.Current is null
                 ? DBNull.Value
                 : Serialize(state.Current, VaultJsonContext.Default.ReconciliationSnapshot));
             command.ExecuteNonQuery();
         }
 
+        Sync(connection, transaction, "funding_accounts", state.Configuration.Accounts, value => value.Id, VaultJsonContext.Default.FundingAccount);
+        Sync(connection, transaction, "category_rules", state.Rules.Categories, value => value.Category, VaultJsonContext.Default.CategoryRule);
+        Sync(connection, transaction, "subcategory_rules", state.Rules.Subcategories,
+            value => $"{value.Category}\u001f{value.Subcategory}", VaultJsonContext.Default.SubcategoryRule);
+        Sync(connection, transaction, "reporting_categories", state.Rules.Reporting,
+            value => $"{value.Category}\u001f{value.Subcategory}", VaultJsonContext.Default.ReportingCategory);
         Sync(connection, transaction, "imported_transactions", state.Records, value => value.Id, VaultJsonContext.Default.ImportedTransaction);
         Sync(connection, transaction, "settled_transaction_ids", state.SettledTransactionIds, value => value, VaultJsonContext.Default.String);
         Sync(connection, transaction, "effective_transactions", state.EffectiveTransactions, value => value.Transaction.Id, VaultJsonContext.Default.AllocatedTransaction);
@@ -87,7 +96,62 @@ internal static class VaultStateStore
         Sync(connection, transaction, "current_adjustments", state.CurrentAdjustments, value => value.Id, VaultJsonContext.Default.Adjustment);
         Sync(connection, transaction, "active_transaction_ids", state.ActiveTransactionIds, value => value, VaultJsonContext.Default.String);
         Sync(connection, transaction, "settled_baseline", state.SettledBaseline, value => value.Transaction.Id, VaultJsonContext.Default.AllocatedTransaction);
+
+        UpdateRelationalColumns(connection, transaction, state);
     }
+
+    private static void UpdateRelationalColumns(SqliteConnection connection, SqliteTransaction transaction,
+        ReconciliationBookState state)
+    {
+        foreach (FundingAccount value in state.Configuration.Accounts)
+            Update(connection, transaction, "funding_accounts", value.Id,
+                "role = $one, protected_minimum_minor = $two, priority = $three",
+                ("$one", (int)value.Role), ("$two", Minor(value.ProtectedMinimum)), ("$three", value.Priority));
+        foreach (CategoryRule value in state.Rules.Categories)
+            Update(connection, transaction, "category_rules", value.Category, "funding_source = $one",
+                ("$one", (int)value.Source));
+        foreach (SubcategoryRule value in state.Rules.Subcategories)
+            Update(connection, transaction, "subcategory_rules", $"{value.Category}\u001f{value.Subcategory}",
+                "category = $one, subcategory = $two, funding_source = $three",
+                ("$one", value.Category), ("$two", value.Subcategory), ("$three", (int)value.Source));
+        foreach (ReportingCategory value in state.Rules.Reporting)
+            Update(connection, transaction, "reporting_categories", $"{value.Category}\u001f{value.Subcategory}",
+                "category = $one, subcategory = $two, funding_source = $three",
+                ("$one", value.Category), ("$two", value.Subcategory ?? (object)DBNull.Value), ("$three", (int)value.Source));
+        foreach (ImportedTransaction value in state.Records)
+            Update(connection, transaction, "imported_transactions", value.Id,
+                "transaction_date = $one, amount_decimal = $two, currency = $three, category = $four, subcategory = $five, transaction_kind = $six",
+                ("$one", value.Date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)),
+                ("$two", value.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("$three", value.Currency),
+                ("$four", value.Category), ("$five", value.Subcategory), ("$six", (int)value.Kind));
+        foreach (AllocatedTransaction value in state.EffectiveTransactions)
+            Update(connection, transaction, "effective_transactions", value.Transaction.Id,
+                "funding_source = $one, cost_minor = $two, card_cost_minor = $three, eligible = $four",
+                ("$one", value.Source is null ? DBNull.Value : (int)value.Source.Value), ("$two", Minor(value.CostGbp)),
+                ("$three", Minor(value.CardCostGbp)), ("$four", value.Eligible ? 1 : 0));
+        foreach (ReconciliationSnapshot value in state.History)
+            Update(connection, transaction, "reconciliation_history", value.Id,
+                "reconciliation_date = $one, locked = $two, card_paid = $three",
+                ("$one", value.Date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)),
+                ("$two", value.Locked ? 1 : 0), ("$three", value.CardPaid ? 1 : 0));
+        foreach (AcceptedCorrection value in state.AcceptedCorrections)
+            Update(connection, transaction, "accepted_corrections", $"{value.ReconciliationId}\u001f{value.Sequence:D10}",
+                "reconciliation_id = $one, sequence = $two, transaction_id = $three",
+                ("$one", value.ReconciliationId), ("$two", value.Sequence), ("$three", value.TransactionId));
+    }
+
+    private static void Update(SqliteConnection connection, SqliteTransaction transaction, string table,
+        string key, string assignments, params (string Name, object Value)[] parameters)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = $"UPDATE {table} SET {assignments} WHERE item_key = $key;";
+        command.Parameters.AddWithValue("$key", key);
+        foreach ((string name, object value) in parameters) command.Parameters.AddWithValue(name, value);
+        if (command.ExecuteNonQuery() != 1) throw new InvalidDataException("A relational vault row could not be projected.");
+    }
+
+    private static long Minor(decimal value) => checked((long)(value * 100m));
 
     private static void Sync<T>(SqliteConnection connection, SqliteTransaction transaction, string table,
         IEnumerable<T> values, Func<T, string> key, JsonTypeInfo<T> typeInfo)

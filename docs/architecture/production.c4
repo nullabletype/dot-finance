@@ -27,7 +27,7 @@ model {
       technology 'SQLite3MC / Microsoft.Data.Sqlite'
       description 'Implemented versioned schema, complete reconciliation-state persistence, migrations and interruption-safe encrypted backup/restore. Pins sqleet ChaCha20, authenticated pages and a 600,000-iteration PBKDF2-SHA256 work factor.'
       schema = component 'Schema and state codec' {
-        description 'Versioned strict metadata and keyed entity tables with incremental transactional upserts and trim-safe row codecs for the storage-neutral domain state contract.'
+        description 'Versioned strict metadata and keyed entity tables with indexed query fields, incremental transactional upserts and trim-safe row codecs for the complete domain state contract.'
       }
       recovery = component 'Backup and recovery' {
         description 'Stages, validates and atomically replaces encrypted backups or restored working vaults without presenting partial files as complete.'
