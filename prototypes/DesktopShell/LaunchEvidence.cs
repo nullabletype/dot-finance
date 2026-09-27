@@ -71,6 +71,11 @@ internal static class LaunchEvidence
             window.Width = 1040;
             window.Height = 660;
             await WaitForCompactWidthAsync(window, 1040);
+
+            window.SetThemeForCapture("Light");
+            RenderPng(window, Path.Combine(outputDirectory, "review-compact-light.png"));
+
+            window.SetThemeForCapture("Dark");
             RenderPng(window, Path.Combine(outputDirectory, "review-compact-dark.png"));
             object compactLayout = window.ReviewLayoutEvidence();
 

@@ -21,7 +21,7 @@ const result = spawnSync('dotnet', ['artifacts/desktop/DesktopShell.dll', '--wor
 if (result.error) throw result.error;
 if (result.status !== 0) throw new Error(`Workflow capture failed: ${result.status}`);
 
-for (const name of ['review-before-light.png', 'review-before-dark.png', 'review-compact-dark.png', 'review-after-light.png', 'review-after-dark.png']) {
+for (const name of ['review-before-light.png', 'review-before-dark.png', 'review-compact-light.png', 'review-compact-dark.png', 'review-after-light.png', 'review-after-dark.png']) {
   if (!existsSync(join(output, name))) throw new Error(`Workflow capture is missing ${name}`);
 }
 
@@ -53,4 +53,4 @@ for (const [name, actual, expected] of checks) {
   if (actual !== expected) throw new Error(`${name}: expected ${expected}, got ${actual}`);
 }
 
-console.log(`PASS: guided workflow evidence and five responsive theme screenshots captured in ${output}${build.dirty ? ' (uncommitted build; provisional evidence)' : ''}.`);
+console.log(`PASS: guided workflow evidence and six responsive theme screenshots captured in ${output}${build.dirty ? ' (uncommitted build; provisional evidence)' : ''}.`);
