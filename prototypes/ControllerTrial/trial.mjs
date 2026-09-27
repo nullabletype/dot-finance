@@ -61,7 +61,12 @@ try {
 
   step('interruption', 'init', 'synthetic');
   const killed = step('interruption', 'check', 'interrupt');
-  assert.equal(killed.signal, 'SIGKILL');
+  if (process.platform === 'win32') {
+    assert.equal(killed.signal, null, 'Windows has no POSIX termination signal');
+    assert.notEqual(killed.status, 0, 'Interrupted controller must not exit successfully');
+  } else {
+    assert.equal(killed.signal, 'SIGKILL');
+  }
   assert.notEqual(read('interruption').activeSince, null);
   const processReceipt = resolve(base, 'interruption', 'process-2.json');
   const deadline = Date.now() + 5000;
