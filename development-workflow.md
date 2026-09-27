@@ -85,7 +85,9 @@ CLI validation detects model syntax errors and manual layout drift. It does not 
 
 ## Human checkpoints
 
-Proposed checkpoints: approve the contract and worked financial examples; review the first complete synthetic desktop workflow; accept a release candidate with cross-platform and security evidence. Routine repairs within approved scope remain autonomous. Changes to financial semantics, validation policy, destructive operations, and release publication require the applicable explicit authority.
+Human checkpoints: approve the contract and worked financial examples; review the first complete synthetic desktop workflow; privately trial the complete production workflow with real data in the isolated boundary defined by issue #34; accept a release candidate with cross-platform and security evidence. Routine repairs within approved scope remain autonomous. Changes to financial semantics, validation policy, destructive operations, and release publication require the applicable explicit authority.
+
+The issue #34 trial is owner-operated on an isolated local machine or profile with application networking blocked. Real financial records, databases, backups, screenshots, filenames, and raw output never enter the repository, GitHub, agent context, prompts, logs, CI, test fixtures, or uploaded artifacts. Record only sanitised scenario outcomes and reproduce every actionable finding with synthetic data before implementation. The trial can accept the direction, require bounded rework, or stop release planning; it cannot weaken automated gates or authorise payment initiation, connectivity, automatic merge, or release publication.
 
 Before unattended execution, test the loop itself with an intentional failure, interrupted run, unavailable runner, and review rejection. Verify resumption, bounded retries, and truthful status reporting.
 

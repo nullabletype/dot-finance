@@ -127,6 +127,8 @@ Generate synthetic financial data; do not use real financial data for developmen
 
 Verify that the category-totals sidebar remains visible during transaction review and scrolling, updates from the same draft state after accepted changes, and agrees with the final confirmation totals. Cover refunds, uncategorised transactions, and unapplied versus accepted rule-change previews. Include the sidebar in Light and Dark prototype review.
 
+After the complete production workflow and verified importer are integrated, provide a private owner-operated acceptance checkpoint using real financial data before release-candidate packaging. Run it locally with application networking blocked and keep all real records, vaults, backups, screenshots, filenames, and raw output outside source control, GitHub, agent context, CI, logs, and uploaded evidence. Record only sanitised outcomes; reproduce defects and unmet needs with synthetic data before development work. This checkpoint validates the product direction and real flow but does not replace automated synthetic tests, security gates, or explicit release approval.
+
 ## Planning boundary
 
 Use GitHub Issues and a GitHub Project for development ticketing. Use LikeC4 for versioned architectural diagrams, kept current with implementation changes and validated and generated as part of the full build. See [development-workflow.md](development-workflow.md) for the proposed agent loop and validation gates.

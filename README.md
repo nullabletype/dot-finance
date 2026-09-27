@@ -40,9 +40,10 @@ The accepted production queue is deliberately dependency-ordered:
 3. [Encrypted SQLite3MC vault and recovery](https://github.com/nullabletype/dot-finance/issues/29)
 4. [Verified Emma import contract](https://github.com/nullabletype/dot-finance/issues/30)
 5. [Accessible guided desktop workflow](https://github.com/nullabletype/dot-finance/issues/31)
-6. [Packaged offline release candidate](https://github.com/nullabletype/dot-finance/issues/32)
+6. [Isolated owner trial with real financial data](https://github.com/nullabletype/dot-finance/issues/34)
+7. [Packaged offline release candidate](https://github.com/nullabletype/dot-finance/issues/32)
 
-Only issue #27 becomes ready when the decision record is integrated. The remaining items retain native dependency edges; #30 also requires sanitised format evidence from the owner. Production work continues one ready issue at a time.
+Only issue #27 becomes ready when the decision record is integrated. The remaining items retain native dependency edges; #30 also requires sanitised format evidence from the owner. Issue #34 is a private, owner-operated acceptance gate after the complete workflow and before release packaging: real records stay outside the repository, agents, GitHub, CI, screenshots, logs, and uploaded evidence. Production work continues one ready issue at a time.
 
 The disposable desktop experiments are under [prototypes/DesktopShell](prototypes/DesktopShell/README.md). All displayed amounts and imported records are fictional. Issues #2 and #3 add a bounded synthetic CSV importer, SQLite3MC-encrypted persistence/backup, and a guided reconciliation trial with a pure calculation engine. There is no payment integration, production importer, or running agent controller.
 
