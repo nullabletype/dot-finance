@@ -9,7 +9,7 @@ const persistenceSensitive = [
   /^prototypes\/DesktopShell(?:\.Tests)?\//,
   /^src\/DotFinance\.Storage\//,
   /^src\/DotFinance\.Application\/ReconciliationCompletion\.cs$/,
-  /^src\/DotFinance\.Domain\/ReconciliationBook\.cs$/,
+  /^src\/DotFinance\.Domain\/(?:FinancialModel|ReconciliationBook)\.cs$/,
   /^src\/DotFinance\.Desktop\/(?:Program|StorageScenario|StorageScenarioJsonContext)\.cs$/,
   /^src\/[^/]+\/(?:[^/]+\.csproj|packages\.lock\.json)$/,
   /^src\/.*(?:Backup|Infrastructure|Persistence|Storage|Vault).*\.cs$/,

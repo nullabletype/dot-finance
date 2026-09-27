@@ -27,6 +27,7 @@ test('runs persistence for reviewed workflow, production contract, and storage-t
   for (const path of [
     '.github/workflows/prototype.yml',
     'src/DotFinance.Application/ReconciliationCompletion.cs',
+    'src/DotFinance.Domain/FinancialModel.cs',
     'src/DotFinance.Domain/ReconciliationBook.cs',
     'src/DotFinance.Storage/EncryptedVault.cs',
     'tests/DotFinance.Storage.Tests/EncryptedVaultTests.cs',
