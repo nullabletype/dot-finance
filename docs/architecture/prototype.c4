@@ -57,7 +57,7 @@ model {
     description 'Local single-writer checkpoints and command output, separate from financial data. Missing or changed evidence invalidates progress; changed policy requires review.'
   }
   tracker = system 'GitHub tracker sandbox' {
-    description 'Issue #10 and its Project 2 item are the only authorised live-write targets. The manual adapter reconciles one marked comment and Todo/In Progress before retrying. Existing operator authentication is not an unattended least-privilege boundary.'
+    description 'Issue #10 and nullabletype user Project 2 are the only authorised live-write targets. Separate response-loss phases reconcile one marked comment and Todo/In Progress before retrying. Existing operator authentication is not an unattended least-privilege boundary.'
   }
   user -> controller 'Manually invokes bounded synthetic trials'
   controller -> build 'Invokes fixed full-build entry point'

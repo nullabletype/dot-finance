@@ -2,7 +2,8 @@
 import assert from 'node:assert/strict';
 import { AmbiguousTrackerWrite, createTracker, trackerMarker, trackerTarget } from './tracker.mjs';
 
-const fake = { comments: [], status: 'Todo', commentWrites: 0, commentUpdates: 0, projectWrites: [] };
+const fake = { comments: [], status: 'Todo', commentWrites: 0, commentUpdates: 0, projectWrites: [],
+  failNextCommentUpdate: false, failNextProjectWrite: false };
 const projectId = 'synthetic-project';
 const itemId = 'synthetic-item';
 const statusFieldId = 'synthetic-status';
@@ -22,8 +23,15 @@ function runGh(args) {
     fake.commentWrites++;
     return 'https://example.invalid/comment';
   }
-  if (args[0] === 'project' && args[1] === 'view') return JSON.stringify({ id: projectId });
+  if (args[0] === 'project' && args[1] === 'view') {
+    return JSON.stringify({ id: projectId, number: trackerTarget.project,
+      owner: { login: trackerTarget.projectOwner, type: 'User' } });
+  }
   if (args[0] === 'api' && args[1] === 'graphql') {
+    if (fake.failNextCommentUpdate) {
+      fake.failNextCommentUpdate = false;
+      throw new Error('Synthetic lost comment response');
+    }
     const body = args.find(argument => argument.startsWith('body='))?.slice('body='.length);
     assert.ok(body?.includes(trackerMarker));
     fake.comments[0] = body;
@@ -39,6 +47,10 @@ function runGh(args) {
       options: Object.entries(options).map(([name, id]) => ({ name, id })) }] });
   }
   if (args[0] === 'project' && args[1] === 'item-edit') {
+    if (fake.failNextProjectWrite) {
+      fake.failNextProjectWrite = false;
+      throw new Error('Synthetic lost project response');
+    }
     const option = args[args.indexOf('--single-select-option-id') + 1];
     fake.status = Object.entries(options).find(([, id]) => id === option)?.[0];
     assert.ok(fake.status);
@@ -48,7 +60,7 @@ function runGh(args) {
   throw new Error(`Unexpected fake gh command: ${args.join(' ')}`);
 }
 
-const tracker = createTracker(runGh);
+let tracker = createTracker(runGh);
 assert.deepEqual(tracker.status(), { issue: 10, issueState: 'OPEN', markerComments: 0, project: 2,
   markerCurrent: false, projectStatus: 'Todo', issueUrl: 'https://example.invalid/sandbox' });
 assert.throws(() => tracker.advance('lost-comment-response'), error => {
@@ -57,6 +69,7 @@ assert.throws(() => tracker.advance('lost-comment-response'), error => {
   return true;
 });
 assert.equal(fake.commentWrites, 1);
+tracker = createTracker(runGh); // A retry starts in a new process and reconciles remote state.
 assert.equal(tracker.status().markerComments, 1);
 assert.throws(() => tracker.advance('lost-project-response'), error => {
   assert.ok(error instanceof AmbiguousTrackerWrite);
@@ -64,6 +77,7 @@ assert.throws(() => tracker.advance('lost-project-response'), error => {
   return true;
 });
 assert.equal(fake.status, 'In Progress');
+tracker = createTracker(runGh);
 assert.deepEqual(tracker.advance().mutations, []);
 assert.equal(fake.commentWrites, 1, 'Reconciliation must not duplicate the marked comment');
 assert.deepEqual(fake.projectWrites, ['In Progress']);
@@ -71,6 +85,13 @@ tracker.reset();
 assert.equal(fake.status, 'Todo');
 assert.deepEqual(fake.projectWrites, ['In Progress', 'Todo']);
 fake.comments[0] = `${trackerMarker}\nOutdated marked body`;
+fake.failNextCommentUpdate = true;
+assert.throws(() => tracker.advance(), error => {
+  assert.ok(error instanceof AmbiguousTrackerWrite);
+  assert.deepEqual(error.receipt.mutations, ['updated-marked-comment-outcome-unknown']);
+  return true;
+});
+tracker = createTracker(runGh);
 assert.throws(() => tracker.advance('lost-comment-response'), error => {
   assert.ok(error instanceof AmbiguousTrackerWrite);
   assert.equal(error.stage, 'comment');
@@ -79,4 +100,12 @@ assert.throws(() => tracker.advance('lost-comment-response'), error => {
 assert.equal(fake.commentWrites, 1);
 assert.equal(fake.commentUpdates, 1);
 assert.equal(tracker.status().markerCurrent, true);
+fake.failNextProjectWrite = true;
+assert.throws(() => tracker.advance(), error => {
+  assert.ok(error instanceof AmbiguousTrackerWrite);
+  assert.deepEqual(error.receipt.mutations, ['moved-project-to-in-progress-outcome-unknown']);
+  return true;
+});
+tracker = createTracker(runGh);
+assert.equal(tracker.status().projectStatus, 'Todo');
 console.log('Offline tracker reconciliation trial passed.');

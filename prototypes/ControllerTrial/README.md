@@ -37,7 +37,7 @@ This experiment assumes the operator and scratch directory are trusted. A malici
 
 ## Tracker and permissions
 
-Issue [#10](https://github.com/nullabletype/dot-finance/issues/10) is the explicitly designated synthetic tracker sandbox. Only its single marked comment and Project 2 Todo/In Progress status may be changed by a tracker trial. Issue #4 remains the work record. The manual adapter uses the operator's existing authenticated `gh` session only after explicit owner authorisation. It is structurally fixed to repository `nullabletype/dot-finance`, issue #10, user Project 2 and those two statuses; it accepts no alternate repository, issue, project, comment or status arguments.
+Issue [#10](https://github.com/nullabletype/dot-finance/issues/10) is the explicitly designated synthetic tracker sandbox. Only its single marked comment and Project 2 Todo/In Progress status may be changed by a tracker trial. Issue #4 remains the work record. The manual adapter uses the operator's existing authenticated `gh` session only after explicit owner authorisation. It is structurally fixed to repository `nullabletype/dot-finance`, issue #10, user-owned Project 2 under `nullabletype` and those two statuses; it accepts no alternate repository, owner, issue, project, comment or status arguments and verifies the resolved Project identity before writing.
 
 The current operator session has broader permissions than this trial needs, so it is not a least-privilege security boundary and must not be represented as one. The adapter never reads, accepts, stores or logs a credential. A future unattended controller requires a genuinely isolated environment in which broader stored `gh` authentication is unavailable and only a narrowly scoped credential is present.
 
@@ -47,7 +47,7 @@ The current operator session has broader permissions than this trial needs, so i
 DOT_FINANCE_TRACKER_TRIAL=issue-10 npm run controller:tracker:live
 ```
 
-The live trial creates the one marked comment, deliberately treats the successful comment response as lost, reconciles it, moves the Project item to In Progress, deliberately treats that response as lost, then proves a retry performs no duplicate writes. It returns #10 to Todo and leaves the marked evidence comment. Its local transcript contains remote state and mutation names, never credentials. Any unexpected issue state, duplicate marker or Project status fails closed for owner review.
+The live trial runs the comment and Project response-loss phases in separate child processes. Each phase first reconciles remote state, so rerunning the entry point after termination following either write resumes from the bounded intermediate state rather than duplicating the write. It then proves a fully reconciled retry performs no writes, returns #10 to Todo and leaves the one marked evidence comment. Its local transcript contains remote state and mutation names, never credentials. Any unexpected issue state, duplicate marker, Project identity or Project status fails closed for owner review.
 
 ## Decision
 
