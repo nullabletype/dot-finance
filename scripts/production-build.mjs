@@ -21,6 +21,7 @@ const status = run('git', ['status', '--porcelain', '--untracked-files=all'], tr
 run('dotnet', ['restore', 'DotFinance.slnx', '--locked-mode']);
 run('dotnet', ['build', 'DotFinance.slnx', '--no-restore', '-c', 'Release', '--warnaserror']);
 run('dotnet', ['test', '--project', 'tests/DotFinance.Domain.Tests/DotFinance.Domain.Tests.csproj', '--no-restore', '-c', 'Release']);
+run('dotnet', ['test', '--project', 'tests/DotFinance.Storage.Tests/DotFinance.Storage.Tests.csproj', '--no-restore', '-c', 'Release']);
 run('dotnet', ['format', 'DotFinance.slnx', '--verify-no-changes', '--no-restore', '--severity', 'info']);
 run(process.execPath, ['scripts/production-architecture.mjs']);
 run(process.execPath, ['scripts/domain-mutations.mjs']);
