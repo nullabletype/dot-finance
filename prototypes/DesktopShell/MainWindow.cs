@@ -101,10 +101,10 @@ public sealed class MainWindow : Window
 
         foreach (Account account in Session.Accounts)
         {
-            _balanceBoxes[account.Name] = CompactTextBox(account.CurrentBalance.ToString("0.00", CultureInfo.InvariantCulture), 104);
+            _balanceBoxes[account.Name] = CompactTextBox(account.CurrentBalance.ToString("0.00", CultureInfo.InvariantCulture), 96);
         }
 
-        _targetBox = CompactTextBox(Session.CardPaymentTarget.ToString("0.00", CultureInfo.InvariantCulture), 104);
+        _targetBox = CompactTextBox(Session.CardPaymentTarget.ToString("0.00", CultureInfo.InvariantCulture), 96);
         _themeBox = CompactComboBox(["System", "Light", "Dark"], 104);
         _themeBox.SelectedItem = ThemeSettings.Load();
 
@@ -616,7 +616,7 @@ public sealed class MainWindow : Window
 
     private Grid BalanceRow(Account account)
     {
-        Grid row = new() { ColumnDefinitions = new ColumnDefinitions("*,12,104") };
+        Grid row = new() { ColumnDefinitions = new ColumnDefinitions("*,8,96") };
         TextBlock name = new()
         {
             Text = account.Name,
@@ -640,7 +640,7 @@ public sealed class MainWindow : Window
 
     private Grid TargetRow()
     {
-        Grid row = new() { ColumnDefinitions = new ColumnDefinitions("*,12,104") };
+        Grid row = new() { ColumnDefinitions = new ColumnDefinitions("*,8,96") };
         TextBlock label = new() { Text = "Card payment target", VerticalAlignment = VerticalAlignment.Center, FontSize = 14 };
         row.Children.Add(label);
         Grid.SetColumn(_targetBox, 2);
