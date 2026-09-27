@@ -31,7 +31,7 @@ npm run build
 npm run workflow:smoke
 ```
 
-`workflow:smoke` checks the expected synthetic calculation outcomes and captures six native screenshots: Light and Dark before/after correction, plus the compact-window layout in both themes. Compact evidence asserts that filters and the transaction ledger scroll within clipped frames without crossing into the inspector.
+`workflow:smoke` checks the expected synthetic calculation outcomes and captures ten native screenshots: Light and Dark before/after correction, plus the compact-window ledger, balances, and rules layouts in both themes. Compact evidence asserts that filters and the transaction ledger scroll within clipped frames without crossing into the inspector, balance labels stay within their column, and paired rule controls stay within their row.
 
 ## Independent review follow-up
 

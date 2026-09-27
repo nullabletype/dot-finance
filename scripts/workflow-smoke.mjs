@@ -21,7 +21,7 @@ const result = spawnSync('dotnet', ['artifacts/desktop/DesktopShell.dll', '--wor
 if (result.error) throw result.error;
 if (result.status !== 0) throw new Error(`Workflow capture failed: ${result.status}`);
 
-for (const name of ['review-before-light.png', 'review-before-dark.png', 'review-compact-light.png', 'review-compact-dark.png', 'review-after-light.png', 'review-after-dark.png']) {
+for (const name of ['review-before-light.png', 'review-before-dark.png', 'review-compact-light.png', 'review-compact-dark.png', 'review-compact-balances-light.png', 'review-compact-balances-dark.png', 'review-compact-rules-light.png', 'review-compact-rules-dark.png', 'review-after-light.png', 'review-after-dark.png']) {
   if (!existsSync(join(output, name))) throw new Error(`Workflow capture is missing ${name}`);
 }
 
@@ -34,6 +34,12 @@ if (!evidence.compactLayout.horizontalOverflow || evidence.compactLayout.horizon
 }
 if (!evidence.compactLayout.filterHorizontalOverflow || evidence.compactLayout.filterScrollMode !== 'Auto' || !evidence.compactLayout.filterClipsToFrame) {
   throw new Error('Compact filters must scroll horizontally inside their clipped frame.');
+}
+if (evidence.compactLayout.balanceLabelsConstrained) {
+  throw new Error(`Compact balance labels exceed their arranged column: desired ${evidence.compactLayout.maximumBalanceLabelDesiredWidth}, available ${evidence.compactLayout.minimumBalanceLabelWidth}.`);
+}
+if (evidence.compactLayout.ruleRowsOverflow) {
+  throw new Error(`Compact rule inputs exceed their row: desired ${evidence.compactLayout.maximumRuleRowDesiredWidth}, available ${evidence.compactLayout.minimumRuleRowWidth}.`);
 }
 const checks = [
   ['base Joint', evidence.beforeAcceptedCorrection.jointContribution, evidence.expected.beforeAcceptedCorrection.joint],
@@ -66,4 +72,4 @@ for (const [name, actual, expected] of checks) {
   if (actual !== expected) throw new Error(`${name}: expected ${expected}, got ${actual}`);
 }
 
-console.log(`PASS: guided workflow evidence and six responsive theme screenshots captured in ${output}${build.dirty ? ' (uncommitted build; provisional evidence)' : ''}.`);
+console.log(`PASS: guided workflow evidence and ten responsive theme screenshots captured in ${output}${build.dirty ? ' (uncommitted build; provisional evidence)' : ''}.`);

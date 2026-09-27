@@ -40,6 +40,8 @@ public sealed class MainWindow : Window
     private readonly ContentControl _workspace;
     private readonly ContentControl _transactionDetails;
     private readonly Dictionary<string, TextBox> _balanceBoxes = new(StringComparer.Ordinal);
+    private readonly List<(Control Label, TextBox Input)> _balanceRows = [];
+    private readonly List<(Control Row, Control RightInput)> _ruleInputRows = [];
     private readonly List<Button> _stageButtons = [];
     private readonly List<Control> _pages = [];
     private readonly TextBox _targetBox;
@@ -60,6 +62,8 @@ public sealed class MainWindow : Window
     private Border _filterFrame = null!;
     private StackPanel _filterContent = null!;
     private ScrollViewer _filterScroll = null!;
+    private Expander _balancesExpander = null!;
+    private Expander _rulesExpander = null!;
 
     public WorkflowSession Session { get; } = new();
 
@@ -97,10 +101,10 @@ public sealed class MainWindow : Window
 
         foreach (Account account in Session.Accounts)
         {
-            _balanceBoxes[account.Name] = CompactTextBox(account.CurrentBalance.ToString("0.00", CultureInfo.InvariantCulture), 112);
+            _balanceBoxes[account.Name] = CompactTextBox(account.CurrentBalance.ToString("0.00", CultureInfo.InvariantCulture), 104);
         }
 
-        _targetBox = CompactTextBox(Session.CardPaymentTarget.ToString("0.00", CultureInfo.InvariantCulture), 112);
+        _targetBox = CompactTextBox(Session.CardPaymentTarget.ToString("0.00", CultureInfo.InvariantCulture), 104);
         _themeBox = CompactComboBox(["System", "Light", "Dark"], 104);
         _themeBox.SelectedItem = ThemeSettings.Load();
 
@@ -353,7 +357,30 @@ public sealed class MainWindow : Window
             filterHorizontalOverflow = _filterContent.Bounds.Width > _filterFrame.Bounds.Width + 0.5,
             filterScrollMode = _filterScroll.HorizontalScrollBarVisibility.ToString(),
             filterClipsToFrame = _filterFrame.ClipToBounds,
+            balanceLabelsConstrained = _balanceRows.Any(pair => pair.Label is TextBlock label
+                && label.TextLayout.WidthIncludingTrailingWhitespace > label.Bounds.Width + 0.5),
+            minimumBalanceLabelWidth = _balanceRows.Min(pair => pair.Label.Bounds.Width),
+            maximumBalanceLabelDesiredWidth = _balanceRows
+                .Max(pair => pair.Label is TextBlock label ? label.TextLayout.WidthIncludingTrailingWhitespace : pair.Label.DesiredSize.Width),
+            ruleRowsOverflow = _ruleInputRows.Any(pair =>
+                (pair.RightInput.TranslatePoint(default, pair.Row)?.X ?? 0) + pair.RightInput.Bounds.Width > pair.Row.Bounds.Width + 0.5),
+            maximumRuleRowDesiredWidth = _ruleInputRows.Max(pair =>
+                (pair.RightInput.TranslatePoint(default, pair.Row)?.X ?? 0) + pair.RightInput.Bounds.Width),
+            minimumRuleRowWidth = _ruleInputRows.Min(pair => pair.Row.Bounds.Width),
         };
+    }
+
+    internal void ExpandCompactControlsForEvidence()
+    {
+        _balancesExpander.IsExpanded = true;
+        _rulesExpander.IsExpanded = true;
+    }
+
+    internal void ShowCompactBalancesForEvidence() => _balancesExpander.BringIntoView();
+
+    internal void ScrollCompactControlsToEndForEvidence()
+    {
+        _rulesExpander.BringIntoView();
     }
 
     private Border BuildFilterBar()
@@ -421,18 +448,24 @@ public sealed class MainWindow : Window
         apply.HorizontalAlignment = HorizontalAlignment.Stretch;
         apply.Click += (_, _) => ApplyBalancesAndTarget();
         content.Children.Add(apply);
-        return FramedExpander("Balances and card target", content);
+        _balancesExpander = FramedExpander("Balances and card target", content);
+        return _balancesExpander;
     }
 
     private Expander BuildRulesExpander()
     {
         StackPanel content = new() { Spacing = 12, Margin = new Thickness(0, 10, 0, 0) };
         content.Children.Add(SubsectionTitle("Category rule"));
-        ComboBox categoryBox = CompactComboBox(["Groceries", "Dining", "Travel"], 126);
+        ComboBox categoryBox = StretchComboBox(["Groceries", "Dining", "Travel"]);
         categoryBox.SelectedIndex = 0;
-        ComboBox sourceBox = CompactComboBox(["Joint", "Shared Savings", "Personal"], 142);
+        ComboBox sourceBox = StretchComboBox(["Joint", "Shared Savings", "Personal"]);
         sourceBox.SelectedIndex = 2;
-        content.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { categoryBox, sourceBox } });
+        Grid categoryRow = new() { ColumnDefinitions = new ColumnDefinitions("*,8,*") };
+        categoryRow.Children.Add(categoryBox);
+        Grid.SetColumn(sourceBox, 2);
+        categoryRow.Children.Add(sourceBox);
+        _ruleInputRows.Add((categoryRow, sourceBox));
+        content.Children.Add(categoryRow);
         StackPanel ruleButtons = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
         Button preview = ActionButton("Preview", "review");
         preview.Click += (_, _) =>
@@ -455,9 +488,17 @@ public sealed class MainWindow : Window
         content.Children.Add(_previewText);
         content.Children.Add(new Separator { Background = LineBrush });
         content.Children.Add(SubsectionTitle("Allocation override"));
-        ComboBox overrideBox = CompactComboBox(["Joint", "Shared Savings", "Personal"], 142);
+        ComboBox overrideBox = StretchComboBox(["Joint", "Shared Savings", "Personal"]);
         overrideBox.SelectedIndex = 0;
-        content.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { _overrideIdBox, overrideBox } });
+        _overrideIdBox.Width = double.NaN;
+        _overrideIdBox.MinWidth = 0;
+        _overrideIdBox.HorizontalAlignment = HorizontalAlignment.Stretch;
+        Grid overrideRow = new() { ColumnDefinitions = new ColumnDefinitions("*,8,*") };
+        overrideRow.Children.Add(_overrideIdBox);
+        Grid.SetColumn(overrideBox, 2);
+        overrideRow.Children.Add(overrideBox);
+        _ruleInputRows.Add((overrideRow, overrideBox));
+        content.Children.Add(overrideRow);
         StackPanel overrideButtons = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
         Button applyOverride = ActionButton("Apply override", "check", true);
         applyOverride.Click += (_, _) => ApplyOverride(overrideBox, false);
@@ -466,7 +507,8 @@ public sealed class MainWindow : Window
         clearOverride.Click += (_, _) => ApplyOverride(overrideBox, true);
         overrideButtons.Children.Add(clearOverride);
         content.Children.Add(overrideButtons);
-        return FramedExpander("Rules and overrides", content);
+        _rulesExpander = FramedExpander("Rules and overrides", content);
+        return _rulesExpander;
     }
 
     private void ApplyOverride(ComboBox overrideBox, bool clear)
@@ -574,24 +616,36 @@ public sealed class MainWindow : Window
 
     private Grid BalanceRow(Account account)
     {
-        Grid row = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-        row.Children.Add(new TextBlock
+        Grid row = new() { ColumnDefinitions = new ColumnDefinitions("*,12,104") };
+        TextBlock name = new()
         {
-            Text = $"{account.Name}  ·  min {account.ProtectedMinimum.ToString("C0", BritishCulture)}",
-            VerticalAlignment = VerticalAlignment.Center,
+            Text = account.Name,
             FontSize = 14,
+            FontWeight = FontWeight.SemiBold,
+        };
+        StackPanel label = new() { Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
+        label.Children.Add(name);
+        label.Children.Add(new TextBlock
+        {
+            Text = $"Minimum {account.ProtectedMinimum.ToString("C0", BritishCulture)}",
+            Foreground = MutedBrush,
+            FontSize = 11,
         });
-        Grid.SetColumn(_balanceBoxes[account.Name], 1);
+        row.Children.Add(label);
+        Grid.SetColumn(_balanceBoxes[account.Name], 2);
         row.Children.Add(_balanceBoxes[account.Name]);
+        _balanceRows.Add((name, _balanceBoxes[account.Name]));
         return row;
     }
 
     private Grid TargetRow()
     {
-        Grid row = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-        row.Children.Add(new TextBlock { Text = "Card payment target", VerticalAlignment = VerticalAlignment.Center, FontSize = 14 });
-        Grid.SetColumn(_targetBox, 1);
+        Grid row = new() { ColumnDefinitions = new ColumnDefinitions("*,12,104") };
+        TextBlock label = new() { Text = "Card payment target", VerticalAlignment = VerticalAlignment.Center, FontSize = 14 };
+        row.Children.Add(label);
+        Grid.SetColumn(_targetBox, 2);
         row.Children.Add(_targetBox);
+        _balanceRows.Add((label, _targetBox));
         return row;
     }
 
@@ -1482,6 +1536,14 @@ public sealed class MainWindow : Window
         VerticalContentAlignment = VerticalAlignment.Center,
         HorizontalContentAlignment = HorizontalAlignment.Left,
     };
+
+    private static ComboBox StretchComboBox(IEnumerable<string> items)
+    {
+        ComboBox comboBox = CompactComboBox(items, double.NaN);
+        comboBox.MinWidth = 0;
+        comboBox.HorizontalAlignment = HorizontalAlignment.Stretch;
+        return comboBox;
+    }
 
     private static Grid LedgerGrid() => new()
     {
