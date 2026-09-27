@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { AmbiguousTrackerWrite, createTracker, trackerMarker, trackerTarget } from './tracker.mjs';
 
-const fake = { comments: [], status: 'Todo', commentWrites: 0, projectWrites: [] };
+const fake = { comments: [], status: 'Todo', commentWrites: 0, commentUpdates: 0, projectWrites: [] };
 const projectId = 'synthetic-project';
 const itemId = 'synthetic-item';
 const statusFieldId = 'synthetic-status';
@@ -11,7 +11,7 @@ function runGh(args) {
   if (args[0] === 'issue' && args[1] === 'view') {
     assert.deepEqual(args.slice(2, 5), [String(trackerTarget.issue), '--repo', trackerTarget.repository]);
     return JSON.stringify({ state: 'OPEN', url: 'https://example.invalid/sandbox',
-      comments: fake.comments.map(body => ({ body })) });
+      comments: fake.comments.map((body, index) => ({ body, id: `synthetic-comment-${index}` })) });
   }
   if (args[0] === 'issue' && args[1] === 'comment') {
     assert.equal(args[2], String(trackerTarget.issue));
@@ -23,6 +23,13 @@ function runGh(args) {
     return 'https://example.invalid/comment';
   }
   if (args[0] === 'project' && args[1] === 'view') return JSON.stringify({ id: projectId });
+  if (args[0] === 'api' && args[1] === 'graphql') {
+    const body = args.find(argument => argument.startsWith('body='))?.slice('body='.length);
+    assert.ok(body?.includes(trackerMarker));
+    fake.comments[0] = body;
+    fake.commentUpdates++;
+    return JSON.stringify({ data: { updateIssueComment: { issueComment: { id: 'synthetic-comment-0' } } } });
+  }
   if (args[0] === 'project' && args[1] === 'item-list') {
     return JSON.stringify({ items: [{ id: itemId, status: fake.status,
       content: { number: trackerTarget.issue, repository: trackerTarget.repository } }] });
@@ -43,7 +50,7 @@ function runGh(args) {
 
 const tracker = createTracker(runGh);
 assert.deepEqual(tracker.status(), { issue: 10, issueState: 'OPEN', markerComments: 0, project: 2,
-  projectStatus: 'Todo', issueUrl: 'https://example.invalid/sandbox' });
+  markerCurrent: false, projectStatus: 'Todo', issueUrl: 'https://example.invalid/sandbox' });
 assert.throws(() => tracker.advance('lost-comment-response'), error => {
   assert.ok(error instanceof AmbiguousTrackerWrite);
   assert.equal(error.stage, 'comment');
@@ -63,4 +70,13 @@ assert.deepEqual(fake.projectWrites, ['In Progress']);
 tracker.reset();
 assert.equal(fake.status, 'Todo');
 assert.deepEqual(fake.projectWrites, ['In Progress', 'Todo']);
+fake.comments[0] = `${trackerMarker}\nOutdated marked body`;
+assert.throws(() => tracker.advance('lost-comment-response'), error => {
+  assert.ok(error instanceof AmbiguousTrackerWrite);
+  assert.equal(error.stage, 'comment');
+  return true;
+});
+assert.equal(fake.commentWrites, 1);
+assert.equal(fake.commentUpdates, 1);
+assert.equal(tracker.status().markerCurrent, true);
 console.log('Offline tracker reconciliation trial passed.');

@@ -13,7 +13,7 @@ export const trackerTarget = Object.freeze({
   allowedStatuses: ['Todo', 'In Progress'],
 });
 export const trackerMarker = '<!-- dot-finance-controller-trial:issue-4 -->';
-const trackerComment = `${trackerMarker}\nManual issue #4 tracker-recovery trial. Reconcile this marker before retrying; do not create a second comment.`;
+const trackerComment = `${trackerMarker}\nManual issue #4 tracker-recovery trial. Reconcile this exact marked comment before retrying; do not create a second comment. Existing operator authentication is not unattended authority.`;
 
 export class AmbiguousTrackerWrite extends Error {
   constructor(stage, receipt) {
@@ -44,10 +44,13 @@ export function createTracker(runGh = defaultRunGh) {
   function issueState() {
     const issue = parseJson(runGh(['issue', 'view', String(trackerTarget.issue), '--repo', trackerTarget.repository,
       '--json', 'comments,state,url']), 'issue read');
+    const marked = issue.comments.filter(comment => comment.body.includes(trackerMarker));
     return {
       state: issue.state,
       url: issue.url,
-      markerComments: issue.comments.filter(comment => comment.body.includes(trackerMarker)).length,
+      markerComments: marked.length,
+      markerCurrent: marked.length === 1 && marked[0].body === trackerComment,
+      markerId: marked.length === 1 ? marked[0].id : undefined,
     };
   }
 
@@ -71,6 +74,7 @@ export function createTracker(runGh = defaultRunGh) {
     }
     if (issue.markerComments > 1) throw new Error('Duplicate marked tracker comments require owner review');
     return { issue: trackerTarget.issue, issueState: issue.state, markerComments: issue.markerComments,
+      markerCurrent: issue.markerCurrent,
       project: trackerTarget.project, projectStatus: project.status, issueUrl: issue.url };
   }
 
@@ -91,6 +95,12 @@ export function createTracker(runGh = defaultRunGh) {
       nextAction: 'Re-read the marked comment and Project status before retrying' });
   }
 
+  function writeOrPending(stage, args, before, mutations, mutation) {
+    try { runGh(args); }
+    catch { pending(stage, before, [...mutations, `${mutation}-outcome-unknown`]); }
+    mutations.push(mutation);
+  }
+
   function advance(simulation) {
     if (![undefined, 'lost-comment-response', 'lost-project-response'].includes(simulation)) {
       throw new Error('Unknown tracker simulation');
@@ -99,14 +109,23 @@ export function createTracker(runGh = defaultRunGh) {
     const mutations = [];
     let current = before;
     if (current.markerComments === 0) {
-      runGh(['issue', 'comment', String(trackerTarget.issue), '--repo', trackerTarget.repository, '--body', trackerComment]);
-      mutations.push('created-marked-comment');
+      writeOrPending('comment', ['issue', 'comment', String(trackerTarget.issue), '--repo', trackerTarget.repository,
+        '--body', trackerComment], before, mutations, 'created-marked-comment');
+      if (simulation === 'lost-comment-response') pending('comment', before, mutations);
+      current = snapshot();
+    } else if (!current.markerCurrent) {
+      const issue = issueState();
+      if (issue.markerComments !== 1 || !issue.markerId) throw new Error('Marked tracker comment changed during reconciliation');
+      const mutation = 'mutation($id:ID!,$body:String!){updateIssueComment(input:{id:$id,body:$body}){issueComment{id}}}';
+      writeOrPending('comment', ['api', 'graphql', '-f', `query=${mutation}`, '-F', `id=${issue.markerId}`,
+        '-f', `body=${trackerComment}`], before, mutations, 'updated-marked-comment');
       if (simulation === 'lost-comment-response') pending('comment', before, mutations);
       current = snapshot();
     }
-    if (current.markerComments !== 1) throw new Error('Marked tracker comment was not reconciled');
+    if (current.markerComments !== 1 || !current.markerCurrent) throw new Error('Marked tracker comment was not reconciled');
     if (current.projectStatus === 'Todo') {
-      moveProject('In Progress');
+      try { moveProject('In Progress'); }
+      catch { pending('project', before, [...mutations, 'moved-project-to-in-progress-outcome-unknown']); }
       mutations.push('moved-project-to-in-progress');
       if (simulation === 'lost-project-response') pending('project', before, mutations);
       current = snapshot();
