@@ -23,15 +23,26 @@ dotnet format <project-or-solution> --verify-no-changes --no-restore --severity 
 
 The explicit severity includes suggestion-level style rules. No StyleCop or third-party formatting convention is added. Prototype CI must run this gate alongside the build and LikeC4 checks.
 
-## Prototype work
+## Prototype evidence and production planning
 
-The prototype phase precedes detailed production planning. Follow the issues and their native dependencies on GitHub:
+The prototype phase completed its owner decision gate on 2026-09-27. Avalonia/.NET, SQLite3MC, and the guided reconciliation semantics are retained as production-planning directions; the development controller remains bounded and manual-only. Follow the evidence issues and subsequent production queue on GitHub:
 
 1. [Desktop build and LikeC4 pipeline](https://github.com/nullabletype/dot-finance/issues/1)
 2. [Encrypted persistence and cross-platform backup restoration](https://github.com/nullabletype/dot-finance/issues/2)
 3. [Guided reconciliation workflow trial](https://github.com/nullabletype/dot-finance/issues/3)
 4. [Agent-loop failure handling and recovery](https://github.com/nullabletype/dot-finance/issues/4)
 5. [Owner decision gate before production planning](https://github.com/nullabletype/dot-finance/issues/5)
+
+The accepted production queue is deliberately dependency-ordered:
+
+1. [Production solution and architecture boundaries](https://github.com/nullabletype/dot-finance/issues/27)
+2. [Reconciliation domain and invariant tests](https://github.com/nullabletype/dot-finance/issues/28)
+3. [Encrypted SQLite3MC vault and recovery](https://github.com/nullabletype/dot-finance/issues/29)
+4. [Verified Emma import contract](https://github.com/nullabletype/dot-finance/issues/30)
+5. [Accessible guided desktop workflow](https://github.com/nullabletype/dot-finance/issues/31)
+6. [Packaged offline release candidate](https://github.com/nullabletype/dot-finance/issues/32)
+
+Only issue #27 becomes ready when the decision record is integrated. The remaining items retain native dependency edges; #30 also requires sanitised format evidence from the owner. Production work continues one ready issue at a time.
 
 The disposable desktop experiments are under [prototypes/DesktopShell](prototypes/DesktopShell/README.md). All displayed amounts and imported records are fictional. Issues #2 and #3 add a bounded synthetic CSV importer, SQLite3MC-encrypted persistence/backup, and a guided reconciliation trial with a pure calculation engine. There is no payment integration, production importer, or running agent controller.
 
