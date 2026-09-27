@@ -2,7 +2,7 @@
 
 ## Decision
 
-Owner decision on 2026-09-26: **accept the guided workflow prototype and continue**.
+Owner decision on 2026-09-26: **accept the guided workflow prototype and continue**. On 2026-09-27 the owner also accepted the repaired behaviour and compact layouts from issue #25, and retained the guided reconciliation semantics for production planning.
 
 This accepts the prototype as evidence for the issue #3 product question. It does not promote the disposable Avalonia shell to production architecture or approve release, packaging, unattended execution, or real financial data.
 
@@ -35,7 +35,8 @@ npm run workflow:smoke
 
 ## Independent review follow-up
 
-- Independent review on 2026-09-27 found four behavioural gaps in the integrated prototype: unresolved review items did not block acknowledgement, completion did not advance to a new draft, changed re-imports were silently skipped, and non-GBP rows did not require an actual GBP amount. Issue #25 owns the bounded repair and its fresh exact-commit review/hosted evidence.
-- The issue #25 repair also closes review-discovered edge cases around locked corrections, correction replay and sequencing, preserved funding responsibility, foreign-currency display, history inspection, safe reopening, and legacy saved-state migration. Two independent final re-reviews found no remaining actionable spec, correctness, standards, or quality findings. Local build and encrypted-persistence checks pass with 38 workflow tests; fresh hosted exact-commit workflow evidence remains required.
+- Independent review on 2026-09-27 found four behavioural gaps in the integrated prototype: unresolved review items did not block acknowledgement, completion did not advance to a new draft, changed re-imports were silently skipped, and non-GBP rows did not require an actual GBP amount. Issue #25 repaired those gaps.
+- The issue #25 repair also closes review-discovered edge cases around locked corrections, correction replay and sequencing, preserved funding responsibility, foreign-currency display, history inspection, safe reopening, and legacy saved-state migration. Two independent final re-reviews found no remaining actionable spec, correctness, standards, or quality findings. Local build and encrypted-persistence checks passed with 38 workflow tests.
+- Hosted run 36330900928 passed the exact repair head `b58c7bc740417f9e7bf5e1934042e5c3ad3bd4ed` on macOS 15, Windows 2025, and Ubuntu 24.04, including the complete cross-platform backup chain and zero GitHub Actions artifacts. The owner visually accepted the final compact balance and rule layouts. PR #26 integrated the repair as `ba50c096a665656bc32f761f5c54f2a1d855a15a`.
 - The earlier integrated prototype passed hosted macOS, Windows and Linux workflow validation plus the cross-platform backup chain in run 36311078900. That evidence predates issue #25 and cannot validate its repair commit.
-- The prototype remains disposable and synthetic-only. Production architecture, importer formats, migrations, packaging/signing, security suitability, and large-dataset behaviour remain undecided.
+- The prototype remains disposable and synthetic-only. ADR-0002 selects Avalonia/.NET for production planning, but importer formats, migrations, packaging/signing, final security suitability, accessibility acceptance, and large-dataset behaviour remain production gates.
