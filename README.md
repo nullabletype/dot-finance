@@ -43,7 +43,7 @@ The accepted production queue is deliberately dependency-ordered:
 6. [Isolated owner trial with real financial data](https://github.com/nullabletype/dot-finance/issues/34)
 7. [Packaged offline release candidate](https://github.com/nullabletype/dot-finance/issues/32)
 
-Only issue #27 becomes ready when the decision record is integrated. The remaining items retain native dependency edges; #30 also requires sanitised format evidence from the owner. Issue #34 is a private, owner-operated acceptance gate after the complete workflow and before release packaging: real records stay outside the repository, agents, GitHub, CI, screenshots, logs, and uploaded evidence. Production work continues one ready issue at a time.
+Issue #27 establishes the production foundation following the accepted decision record. The remaining items retain native dependency edges; #30 also requires sanitised format evidence from the owner. Issue #34 is a private, owner-operated acceptance gate after the complete workflow and before release packaging: real records stay outside the repository, agents, GitHub, CI, screenshots, logs, and uploaded evidence. Production work continues one ready issue at a time.
 
 The disposable desktop experiments are under [prototypes/DesktopShell](prototypes/DesktopShell/README.md). All displayed amounts and imported records are fictional. Issues #2 and #3 add a bounded synthetic CSV importer, SQLite3MC-encrypted persistence/backup, and a guided reconciliation trial with a pure calculation engine. There is no payment integration, production importer, or running agent controller.
 
@@ -57,4 +57,22 @@ npm run persistence:smoke
 npm start
 ```
 
-The full build validates and generates LikeC4 documentation, restores locked .NET dependencies, builds, tests, checks formatting, and publishes a framework-dependent desktop prototype. Smoke mode needs a graphical desktop; on Linux use `xvfb-run -a npm run smoke` in CI. The persistence smoke is non-graphical. All development uses synthetic financial data; the shipped application must remain offline.
+The full build validates and generates LikeC4 documentation, restores locked .NET dependencies, builds, tests, checks formatting, and publishes both the framework-dependent desktop prototype and the self-contained production shell. Smoke mode needs a graphical desktop; on Linux use `xvfb-run -a npm run smoke` in CI. The persistence smoke is non-graphical. All development uses synthetic financial data; the shipped application must remain offline.
+
+## Production foundation
+
+[ADR-0003](docs/adr/0003-production-boundaries.md) defines the production boundaries in `DotFinance.slnx`. The minimal Avalonia host is under `src/DotFinance.Desktop`; Application and Domain are dependency boundaries awaiting their feature implementations. No production reconciliation, CSV import or encrypted persistence is implemented yet.
+
+```sh
+npm run production:build
+npm run production:smoke
+npm run production:start
+```
+
+`production:build` checks evaluated project/package/source boundaries, runs their negative checks, verifies formatting and publishes a self-contained trimmed executable for the current target. Native graphics libraries are bundled and privately extracted by .NET at runtime, as approved by the owner. No separate .NET installation is required. Build outputs stay under `artifacts/production/<rid>/`; they are validation output, not release packages.
+
+`production:smoke` copies only that executable to an isolated directory, renders a native window, and verifies cold launch, cache reuse, missing-library recovery, replacement with a distinct test bundle, and rollback using the same cache. The update variant changes assembly version metadata only; it is not a release. A graphical desktop is required (`xvfb-run -a npm run production:smoke` on Linux). Receipts identify the source commit, binary hashes, target and whether the source was dirty. Screenshots and receipts remain local or in the job workspace, never Actions artifacts.
+
+The full `npm run build` includes production checks alongside the retained prototype regression suite and LikeC4. Native CI covers macOS arm64, Windows x64 and Linux x64; macOS x64 is a publish target but native verification remains pending. Signing, installation, private real-data trials, and release packaging remain later gates. The app does not implement an updater.
+
+See [single-file feasibility and the extraction decision](docs/development/single-executable-feasibility.md) and [dependency support review](docs/development/production-foundation-support.md).

@@ -1,0 +1,41 @@
+model {
+  production = system 'Production application foundation' {
+    description 'Issue #27 minimal shell. One self-contained, trimmed executable per target; native libraries extract privately at runtime. Financial workflows and storage are not yet implemented.'
+    desktop = component 'Desktop host' {
+      technology 'Avalonia / .NET 10'
+      description 'Implemented native window and composition boundary. Contains no financial workflow or persistence. Optional smoke mode renders synthetic launch evidence.'
+    }
+    application = component 'Application boundary' {
+      technology 'C# project'
+      description 'Implemented project boundary only; use cases and consumer-owned ports arrive with their features.'
+    }
+    domain = component 'Domain boundary' {
+      technology 'C# project'
+      description 'Implemented project boundary only; no Avalonia or SQLite dependency. Financial rules remain issue #28.'
+    }
+    importer = component 'PLANNED import adapter' {
+      description 'Issue #30: verified offline CSV parsing. Not implemented.'
+    }
+    storage = component 'PLANNED encrypted vault adapter' {
+      description 'Issue #29: SQLite3MC persistence and portable encrypted backup. Not implemented.'
+    }
+    settings = component 'PLANNED preferences adapter' {
+      description 'Issue #31: non-sensitive local settings. Not implemented.'
+    }
+    desktop -> application 'Project reference; use-case calls planned'
+    application -> domain 'Project reference; domain calls planned'
+  }
+  extraction = system 'Private native-library cache' {
+    description '.NET runtime-managed extraction by application and bundle identity; reused on launch, separate for updated bundles. No financial data or passwords.'
+  }
+  user -> production.desktop 'Opens the minimal native window'
+  production.desktop -> extraction 'Runtime extracts bundled native libraries before startup'
+  build -> production 'Builds, checks boundaries and publishes one executable locally; no release publishing'
+}
+
+views {
+  view productionFoundation {
+    title 'PRODUCTION FOUNDATION — implemented boundaries and planned adapters'
+    include user, production, production.*, extraction
+  }
+}

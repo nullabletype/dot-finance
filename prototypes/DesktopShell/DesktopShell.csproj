@@ -10,9 +10,11 @@
     <PackageReference Include="CsvHelper" Version="33.1.0" />
     <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.12" />
     <PackageReference Include="SQLite3MC.PCLRaw.bundle" Version="2.4.0" />
+    <PackageReference Include="SQLitePCLRaw.core" Version="3.0.5" />
   </ItemGroup>
   <ItemGroup>
     <AvaloniaResource Include="../../assets/dot-finance-mark.svg" Link="Assets/dot-finance-mark.svg" />
     <Content Include="Fixtures/**/*.csv" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <Import Project="../../build/DesktopDependencies.props" />
 </Project>
