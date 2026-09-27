@@ -27,6 +27,8 @@ jobs:
           node-version: '24.21.0'
           cache: npm
       - run: npm ci
+      - name: Controller interruption and recovery trial
+        run: npm run controller:trial
       - name: Linux desktop prerequisites
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y xvfb libice6 libsm6 libfontconfig1 libx11-6 libxext6 libxrender1 strace
