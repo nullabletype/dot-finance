@@ -1,11 +1,15 @@
 {
   "name": "dot-finance-development",
   "private": true,
-  "engines": { "node": ">=22.22.3" },
+  "engines": {
+    "node": "^24.21.0 || ^26.10.0"
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "dotnet run --project prototypes/DesktopShell/DesktopShell.csproj",
+    "ui:prototype": "node scripts/ui-prototype.mjs",
     "smoke": "node scripts/smoke.mjs",
+    "workflow:smoke": "node scripts/workflow-smoke.mjs",
     "persistence:smoke": "node scripts/persistence-smoke.mjs",
     "controller": "node prototypes/ControllerTrial/controller.mjs",
     "controller:trial": "node prototypes/ControllerTrial/trial.mjs",
@@ -14,5 +18,7 @@
     "architecture:build": "likec4 build docs/architecture -o artifacts/architecture --base ./",
     "architecture:negative-check": "node scripts/check-invalid-model.mjs"
   },
-  "devDependencies": { "likec4": "1.59.3" }
+  "devDependencies": {
+    "likec4": "1.59.4"
+  }
 }

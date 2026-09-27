@@ -7,25 +7,40 @@ specification {
 model {
   user = actor 'Desktop user'
   prototype = system 'Experimental desktop shell' {
-    description 'Disposable issues #1 and #2 experiment. Entirely local; no banking connections, calculations or payment operations.'
-    ui = component 'Synthetic summary and vault window' {
+    description 'Disposable issues #1 through #3 experiment. Entirely local; no banking connections or payment operations.'
+    ui = component 'Guided reconciliation window' {
       technology 'Avalonia / .NET 10'
-      description 'Displays fictional constants and runs the password-unlocked synthetic persistence round trip.'
+      description 'Guides fictional import, live allocation review, balance entry, transfer review, manual acknowledgements and history inspection in System, Light and Dark themes.'
     }
     importer = component 'Bounded synthetic CSV importer' {
       technology 'CsvHelper'
       description 'Reads the committed fictional fixture under explicitly recorded, unverified Emma format assumptions.'
     }
     vault = component 'Experimental encrypted vault' {
-      technology 'Microsoft.Data.Sqlite and SQLCipher'
+      technology 'Microsoft.Data.Sqlite and SQLite3MC'
       description 'Persists one JSON state document in an encrypted SQLite database and makes validated atomic backup and restore replacements.'
+    }
+    workflow = component 'Guided workflow session' {
+      technology 'C#'
+      description 'Owns the editable draft, accepted corrections and overrides, discrepancy acknowledgement, locking, pending imports, settlement and completed history.'
+    }
+    engine = component 'Reconciliation engine' {
+      technology 'Pure C# calculations'
+      description 'Allocates transactions and calculates contributions, protected-balance shortfalls, frozen transfers and remaining-step projections.'
+    }
+    settings = component 'Theme settings' {
+      technology 'Local JSON'
+      description 'Persists only the System, Light or Dark preference outside the encrypted financial scenario.'
     }
     evidence = component 'Opt-in launch evidence' {
       description 'Smoke modes capture native launch metadata and synthetic encrypted round-trip evidence to local artifacts.'
     }
     ui -> evidence 'Signals native window opened in smoke mode'
-    ui -> importer 'Imports committed synthetic fixture'
-    ui -> vault 'Unlocks, saves, reloads, backs up and restores'
+    ui -> workflow 'Accepts explicit edits and manual acknowledgements'
+    ui -> settings 'Loads and saves theme preference'
+    workflow -> importer 'Imports committed synthetic fixtures'
+    workflow -> engine 'Recomputes editable state and projects remaining locked steps'
+    ui -> vault 'Unlocks, saves and reopens the guided scenario'
     evidence -> importer 'Loads identical synthetic state on each OS'
     evidence -> vault 'Moves and verifies encrypted backup across OS jobs'
   }
@@ -44,7 +59,7 @@ model {
   user -> controller 'Manually invokes bounded synthetic trials'
   controller -> build 'Invokes fixed full-build entry point'
   controller -> runfiles 'Checkpoints before execution and validates receipts on resume'
-  user -> prototype.ui 'Views synthetic summary locally'
+  user -> prototype.ui 'Trials the synthetic guided workflow locally'
   prototype.vault -> localfiles 'Atomically writes encrypted files'
   build -> prototype 'Builds and publishes the desktop experiment'
 }
@@ -61,5 +76,9 @@ views {
   view persistence {
     title 'EXPERIMENTAL — encrypted save and portable backup flow'
     include user, prototype.ui, prototype.importer, prototype.vault, prototype.evidence, localfiles
+  }
+  view reconciliation {
+    title 'EXPERIMENTAL — guided reconciliation and manual settlement flow'
+    include user, prototype.ui, prototype.workflow, prototype.importer, prototype.engine, prototype.vault, prototype.settings, localfiles
   }
 }
