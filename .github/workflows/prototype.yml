@@ -50,7 +50,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo unshare --net runuser -u "$(id -un)" -- env PATH="$PATH" CI=true DOTNET_EnableDiagnostics=0 xvfb-run -a strace -f -e trace=network -o artifacts/production-network.trace node scripts/production-smoke.mjs
-          if grep -E 'socket\(AF_INET6?,|connect\(.*sa_family=AF_INET' artifacts/production-network.trace; then
+          sudo unshare --net runuser -u "$(id -un)" -- env PATH="$PATH" CI=true DOTNET_EnableDiagnostics=0 strace -f -e trace=network -o artifacts/production-vault-network.trace node scripts/production-vault-smoke.mjs
+          if grep -E 'socket\(AF_INET6?,|connect\(.*sa_family=AF_INET' artifacts/production-network.trace artifacts/production-vault-network.trace; then
             echo 'Unexpected Internet socket attempt from production launch'
             exit 1
           fi
@@ -64,10 +65,11 @@ jobs:
         if: runner.os != 'Linux'
         run: |
           npm run production:smoke
+          npm run production:vault
           npm run smoke
           npm run workflow:smoke
   persistence-macos:
-    name: Backup cycle (macOS start)
+    name: Production backup cycle (macOS start)
     needs: desktop
     runs-on: macos-15
     outputs:
@@ -79,10 +81,12 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
-      - run: dotnet restore prototypes/DesktopShell/DesktopShell.csproj --locked-mode
-      - run: dotnet run --project prototypes/DesktopShell/DesktopShell.csproj --no-restore --configuration Release -- --persistence-cycle initialize cycle prototypes/DesktopShell/Fixtures/synthetic-emma.csv
+      - run: dotnet restore DotFinance.slnx --locked-mode
+      - run: dotnet publish src/DotFinance.Desktop/DotFinance.Desktop.csproj --no-restore --configuration Release --runtime osx-arm64 --output production
+      - run: ./production/DotFinance.Desktop --vault-cycle initialize cycle
         env:
-          DOT_FINANCE_PROTOTYPE_PASSWORD: synthetic-ci-password-not-a-user-secret
+          DOT_FINANCE_VAULT_PASSWORD: synthetic-ci-password-not-a-user-secret
+          DOTNET_BUNDLE_EXTRACT_BASE_DIR: ${{ runner.temp }}/dot-finance-extracted
       - name: Pass encrypted backup to Windows job
         id: backup
         shell: pwsh
@@ -91,7 +95,7 @@ jobs:
           "data=$data" >> $env:GITHUB_OUTPUT
 
   persistence-windows:
-    name: Backup cycle (Windows restore)
+    name: Production backup cycle (Windows restore)
     needs: persistence-macos
     runs-on: windows-2025
     outputs:
@@ -103,7 +107,8 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
-      - run: dotnet restore prototypes/DesktopShell/DesktopShell.csproj --locked-mode
+      - run: dotnet restore DotFinance.slnx --locked-mode
+      - run: dotnet publish src/DotFinance.Desktop/DotFinance.Desktop.csproj --no-restore --configuration Release --runtime win-x64 --output production
       - name: Receive encrypted backup from macOS job
         shell: pwsh
         env:
@@ -111,9 +116,10 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force incoming | Out-Null
           [IO.File]::WriteAllBytes('incoming/portable.dotfinance-backup', [Convert]::FromBase64String($env:BACKUP_DATA))
-      - run: dotnet run --project prototypes/DesktopShell/DesktopShell.csproj --no-restore --configuration Release -- --persistence-cycle continue cycle prototypes/DesktopShell/Fixtures/synthetic-emma.csv incoming/portable.dotfinance-backup
+      - run: .\production\DotFinance.Desktop.exe --vault-cycle continue cycle incoming/portable.dotfinance-backup
         env:
-          DOT_FINANCE_PROTOTYPE_PASSWORD: synthetic-ci-password-not-a-user-secret
+          DOT_FINANCE_VAULT_PASSWORD: synthetic-ci-password-not-a-user-secret
+          DOTNET_BUNDLE_EXTRACT_BASE_DIR: ${{ runner.temp }}/dot-finance-extracted
       - name: Pass encrypted backup to Linux job
         id: backup
         shell: pwsh
@@ -122,7 +128,7 @@ jobs:
           "data=$data" >> $env:GITHUB_OUTPUT
 
   persistence-linux:
-    name: Backup cycle (Linux restore)
+    name: Production backup cycle (Linux restore)
     needs: persistence-windows
     runs-on: ubuntu-24.04
     outputs:
@@ -134,7 +140,8 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
-      - run: dotnet restore prototypes/DesktopShell/DesktopShell.csproj --locked-mode
+      - run: dotnet restore DotFinance.slnx --locked-mode
+      - run: dotnet publish src/DotFinance.Desktop/DotFinance.Desktop.csproj --no-restore --configuration Release --runtime linux-x64 --output production
       - name: Receive encrypted backup from Windows job
         shell: pwsh
         env:
@@ -142,9 +149,10 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force incoming | Out-Null
           [IO.File]::WriteAllBytes('incoming/portable.dotfinance-backup', [Convert]::FromBase64String($env:BACKUP_DATA))
-      - run: dotnet run --project prototypes/DesktopShell/DesktopShell.csproj --no-restore --configuration Release -- --persistence-cycle continue cycle prototypes/DesktopShell/Fixtures/synthetic-emma.csv incoming/portable.dotfinance-backup
+      - run: ./production/DotFinance.Desktop --vault-cycle continue cycle incoming/portable.dotfinance-backup
         env:
-          DOT_FINANCE_PROTOTYPE_PASSWORD: synthetic-ci-password-not-a-user-secret
+          DOT_FINANCE_VAULT_PASSWORD: synthetic-ci-password-not-a-user-secret
+          DOTNET_BUNDLE_EXTRACT_BASE_DIR: ${{ runner.temp }}/dot-finance-extracted
       - name: Pass encrypted backup to final macOS job
         id: backup
         shell: pwsh
@@ -153,7 +161,7 @@ jobs:
           "data=$data" >> $env:GITHUB_OUTPUT
 
   persistence-macos-final:
-    name: Backup cycle (macOS final restore)
+    name: Production backup cycle (macOS final restore)
     needs: persistence-linux
     runs-on: macos-15
     steps:
@@ -163,7 +171,8 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
-      - run: dotnet restore prototypes/DesktopShell/DesktopShell.csproj --locked-mode
+      - run: dotnet restore DotFinance.slnx --locked-mode
+      - run: dotnet publish src/DotFinance.Desktop/DotFinance.Desktop.csproj --no-restore --configuration Release --runtime osx-arm64 --output production
       - name: Receive encrypted backup from Linux job
         shell: pwsh
         env:
@@ -171,6 +180,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force incoming | Out-Null
           [IO.File]::WriteAllBytes('incoming/portable.dotfinance-backup', [Convert]::FromBase64String($env:BACKUP_DATA))
-      - run: dotnet run --project prototypes/DesktopShell/DesktopShell.csproj --no-restore --configuration Release -- --persistence-cycle verify cycle prototypes/DesktopShell/Fixtures/synthetic-emma.csv incoming/portable.dotfinance-backup
+      - run: ./production/DotFinance.Desktop --vault-cycle verify cycle incoming/portable.dotfinance-backup
         env:
-          DOT_FINANCE_PROTOTYPE_PASSWORD: synthetic-ci-password-not-a-user-secret
+          DOT_FINANCE_VAULT_PASSWORD: synthetic-ci-password-not-a-user-secret
+          DOTNET_BUNDLE_EXTRACT_BASE_DIR: ${{ runner.temp }}/dot-finance-extracted

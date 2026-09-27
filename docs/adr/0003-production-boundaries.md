@@ -35,7 +35,7 @@ Keep production code compatible with trimming: prefer compiled bindings, embedde
 
 Build checks require exactly one application file in the publish directory. Native smoke checks copy that executable alone into a fresh directory, launch it with an isolated extraction cache, and bind launch evidence to the tested commit and executable hash. No financial data or password belongs in the extraction cache. Normal runtime extraction relies on an owner-controlled, writable per-user location; do not point it at a shared writable directory. Read-only/denied extraction locations and final macOS application-bundle/signing choices remain packaging checks under #32. A Finder-visible `.app` must not be misrepresented as one physical file.
 
-Issue #27 proves the minimal shell on supported native runners. SQLite3MC integration and its single-file runtime behaviour still require validation under #29; final installers, signing and release-candidate validation remain under #32.
+Issue #27 proves the minimal shell on supported native runners. Issue #29 adds the concrete `DotFinance.Storage` adapter and confines SQLite3MC/Microsoft.Data.Sqlite to that project; Desktop references it only for composition and native validation. Final installers, signing and release-candidate validation remain under #32.
 
 Sources checked on 2026-09-27:
 

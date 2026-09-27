@@ -11,7 +11,7 @@ The initial prototype used `SQLitePCLRaw.bundle_e_sqlcipher` (SQLCipher). That b
 
 ## Decision
 
-Use **SQLite3MC** (`SQLite3MC.PCLRaw.bundle` 2.4.0) with `Microsoft.Data.Sqlite.Core` for encrypted SQLite persistence. The default cipher scheme is sqleet (ChaCha20-Poly1305).
+Use **SQLite3MC** (`SQLite3MC.PCLRaw.bundle` 2.4.0) with `Microsoft.Data.Sqlite.Core` for encrypted SQLite persistence. The production format pins the sqleet cipher (`chacha20`, ChaCha20-Poly1305), non-legacy mode, authenticated-page checking, no plaintext header and 600,000 PBKDF2-HMAC-SHA256 iterations. The work factor follows current OWASP guidance and must remain below one second on supported native runners; changing it is a reviewed format/security decision rather than a platform-specific fallback.
 
 ## Rationale
 
@@ -32,6 +32,7 @@ Use **SQLite3MC** (`SQLite3MC.PCLRaw.bundle` 2.4.0) with `Microsoft.Data.Sqlite.
 ## Consequences
 
 - A native dependency is carried across macOS/Windows/Linux (RID-specific binaries). Accepted; provenance attestation mitigates supply-chain risk.
-- The cipher scheme and KDF parameters must be pinned explicitly for production rather than relying on mutable defaults.
+- The implemented schema records version 1 independently of the domain-state format. Cipher and KDF settings are supplied in the SQLite file URI before the password is applied and are queried back on every open.
+- The password is kept only for the open vault session so encrypted backups can use the same key. The adapter clears its mutable copy on disposal; the immutable strings required by Microsoft.Data.Sqlite cannot be guaranteed to be overwritten by managed code. Passwords never enter settings, paths, command lines, logs, evidence or files.
 - The snapshot prototype's crypto-review findings (iteration-count calibration, nonce bound, re-key on fork) are specific to that bespoke format and do not transfer to SQLite3MC; that prototype is an unreviewed-production fallback only.
 - Existing synthetic SQLCipher prototype data need not be migrated (disposable).
