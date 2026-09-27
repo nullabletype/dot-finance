@@ -9,11 +9,11 @@ export const trackerTarget = Object.freeze({
   repository: 'nullabletype/dot-finance',
   issue: 10,
   project: 2,
-  projectOwner: '@me',
+  projectOwner: 'nullabletype',
   allowedStatuses: ['Todo', 'In Progress'],
 });
 export const trackerMarker = '<!-- dot-finance-controller-trial:issue-4 -->';
-const trackerComment = `${trackerMarker}\nManual issue #4 tracker-recovery trial. Reconcile this exact marked comment before retrying; do not create a second comment. Existing operator authentication is not unattended authority.`;
+const trackerComment = `${trackerMarker}\nManual issue #4 tracker-recovery trial. Each response-loss phase restarts and reconciles this exact comment before continuing. Existing operator authentication is not unattended authority.`;
 
 export class AmbiguousTrackerWrite extends Error {
   constructor(stage, receipt) {
@@ -57,6 +57,9 @@ export function createTracker(runGh = defaultRunGh) {
   function projectState() {
     const project = parseJson(runGh(['project', 'view', String(trackerTarget.project), '--owner', trackerTarget.projectOwner,
       '--format', 'json']), 'project read');
+    if (project.number !== trackerTarget.project || project.owner?.login !== trackerTarget.projectOwner || project.owner?.type !== 'User') {
+      throw new Error('Resolved Project does not match the fixed nullabletype user Project 2 target');
+    }
     const listing = parseJson(runGh(['project', 'item-list', String(trackerTarget.project), '--owner', trackerTarget.projectOwner,
       '--format', 'json', '--limit', '100']), 'project item read');
     const matches = listing.items.filter(item => item.content?.number === trackerTarget.issue &&
