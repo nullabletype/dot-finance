@@ -76,3 +76,5 @@ npm run production:start
 The full `npm run build` includes production checks alongside the retained prototype regression suite and LikeC4. Native CI covers macOS arm64, Windows x64 and Linux x64; macOS x64 is a publish target but native verification remains pending. Signing, installation, private real-data trials, and release packaging remain later gates. The app does not implement an updater.
 
 See [single-file feasibility and the extraction decision](docs/development/single-executable-feasibility.md) and [dependency support review](docs/development/production-foundation-support.md).
+
+The production reconciliation domain and its test evidence are described in [the domain implementation record](docs/development/reconciliation-domain.md). Run `npm run domain:mutations` for the six isolated mutation checks; the full build includes them. The current desktop window does not yet expose these domain operations.

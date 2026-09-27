@@ -1,6 +1,6 @@
 model {
   production = system 'Production application foundation' {
-    description 'Issue #27 minimal shell. One self-contained, trimmed executable per target; native libraries extract privately at runtime. Financial workflows and storage are not yet implemented.'
+    description 'Issue #27 minimal shell. One self-contained, trimmed executable per target; native libraries extract privately at runtime. The pure reconciliation domain is implemented and tested. Application use cases, workflow UI and storage remain planned.'
     desktop = component 'Desktop host' {
       technology 'Avalonia / .NET 10'
       description 'Implemented native window and composition boundary. Contains no financial workflow or persistence. Optional smoke mode renders synthetic launch evidence.'
@@ -11,7 +11,14 @@ model {
     }
     domain = component 'Domain boundary' {
       technology 'C# project'
-      description 'Implemented project boundary only; no Avalonia or SQLite dependency. Financial rules remain issue #28.'
+      description 'Implemented pure financial domain; no Avalonia or SQLite dependency. Implements allocation, signed funding, correction adjustments, protected minima and the reconciliation lifecycle without I/O.'
+      calculation = component 'Allocation and funding' {
+        description 'Configured responsibilities, linked refunds, signed GBP contributions, personal priority, protected minima and reporting totals.'
+      }
+      book = component 'Reconciliation book' {
+        description 'One draft; reviewable imports and corrections; locked reservations; manual acknowledgements; immutable completed snapshots and bounded reopening.'
+      }
+      book -> calculation 'Recalculates editable drafts and projects remaining agreed steps'
     }
     importer = component 'PLANNED import adapter' {
       description 'Issue #30: verified offline CSV parsing. Not implemented.'
@@ -34,6 +41,10 @@ model {
 }
 
 views {
+  view reconciliationDomain {
+    title 'PRODUCTION — pure reconciliation domain'
+    include production.domain, production.domain.*
+  }
   view productionFoundation {
     title 'PRODUCTION FOUNDATION — implemented boundaries and planned adapters'
     include user, production, production.*, extraction
