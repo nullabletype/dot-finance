@@ -31,10 +31,10 @@ npm run build
 npm run workflow:smoke
 ```
 
-`workflow:smoke` checks the expected synthetic calculation outcomes and captures five native screenshots, including Light, Dark, before/after correction, and a compact-window layout. Compact evidence asserts that filters and the transaction ledger scroll within clipped frames without crossing into the inspector.
+`workflow:smoke` checks the expected synthetic calculation outcomes and captures six native screenshots: Light and Dark before/after correction, plus the compact-window layout in both themes. Compact evidence asserts that filters and the transaction ledger scroll within clipped frames without crossing into the inspector.
 
-## Remaining gates
+## Independent review follow-up
 
-- Independent review has not yet been recorded.
-- Hosted macOS, Windows, and Linux evidence must run for the exact committed revision; local captures are provisional while the working tree is dirty.
+- Independent review on 2026-09-27 found four behavioural gaps in the integrated prototype: unresolved review items did not block acknowledgement, completion did not advance to a new draft, changed re-imports were silently skipped, and non-GBP rows did not require an actual GBP amount. Issue #25 owns the bounded repair and its fresh exact-commit review/hosted evidence.
+- The earlier integrated prototype passed hosted macOS, Windows and Linux workflow validation plus the cross-platform backup chain in run 36311078900. That evidence predates issue #25 and cannot validate its repair commit.
 - The prototype remains disposable and synthetic-only. Production architecture, importer formats, migrations, packaging/signing, security suitability, and large-dataset behaviour remain undecided.
