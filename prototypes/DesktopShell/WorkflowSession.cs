@@ -11,6 +11,7 @@ public sealed class WorkflowSession
     private readonly List<Transaction> _imported = [];
     private readonly List<Transaction> _pending = [];
     private readonly List<ReconciliationDraft> _completed = [];
+    private readonly List<PendingTransactionCorrection> _pendingCorrections = [];
     private readonly Dictionary<string, FundingSource> _overrides = new(StringComparer.Ordinal);
 
     public WorkflowSession()
@@ -49,6 +50,8 @@ public sealed class WorkflowSession
 
     public int PendingTransactionCount => _pending.Count;
 
+    public IReadOnlyList<PendingTransactionCorrection> PendingCorrections => _pendingCorrections;
+
     public IReadOnlyList<ReconciliationDraft> CompletedReconciliations => _completed;
 
     public IReadOnlyList<Transaction> Allocated { get; private set; } = [];
@@ -57,32 +60,100 @@ public sealed class WorkflowSession
 
     public ReconciliationDraft? Draft { get; private set; }
 
-    /// <summary>Imports a fixture, skipping Ids already present, then recomputes. Returns (added, skipped).</summary>
-    public (int Added, int Skipped) Import(string path)
+    /// <summary>Imports new transactions, updates editable matches, and queues locked or settled corrections.</summary>
+    public ImportResult Import(string path)
     {
         IReadOnlyList<Transaction> incoming = ReconciliationImport.Read(path);
-        HashSet<string> existing = _imported
-            .Concat(_pending)
-            .Select(transaction => transaction.Id)
-            .ToHashSet(StringComparer.Ordinal);
-        List<Transaction> destination = Draft?.IsLocked == true ? _pending : _imported;
         int added = 0;
         int skipped = 0;
+        int updated = 0;
+        int correctionsQueued = 0;
         foreach (Transaction transaction in ReconciliationEngine.Dedupe(incoming))
         {
-            if (existing.Add(transaction.Id))
+            int currentIndex = FindById(_imported, transaction.Id);
+            if (currentIndex >= 0)
             {
-                destination.Add(transaction);
-                added++;
+                Transaction current = _imported[currentIndex];
+                if (SameImportedFields(current, transaction))
+                {
+                    skipped++;
+                }
+                else if (Draft?.IsLocked == true)
+                {
+                    if (QueueCorrection(current, transaction))
+                    {
+                        correctionsQueued++;
+                    }
+                    else
+                    {
+                        skipped++;
+                    }
+                }
+                else
+                {
+                    _imported[currentIndex] = transaction;
+                    updated++;
+                }
+
+                continue;
+            }
+
+            int pendingIndex = FindById(_pending, transaction.Id);
+            if (pendingIndex >= 0)
+            {
+                if (SameImportedFields(_pending[pendingIndex], transaction))
+                {
+                    skipped++;
+                }
+                else
+                {
+                    _pending[pendingIndex] = transaction;
+                    updated++;
+                }
+
+                continue;
+            }
+
+            Transaction? historical = _completed
+                .AsEnumerable()
+                .Reverse()
+                .SelectMany(reconciliation => reconciliation.Transactions)
+                .FirstOrDefault(candidate => string.Equals(candidate.Id, transaction.Id, StringComparison.Ordinal));
+            if (historical is not null)
+            {
+                if (SameImportedFields(historical, transaction))
+                {
+                    skipped++;
+                }
+                else
+                {
+                    if (QueueCorrection(historical, transaction))
+                    {
+                        correctionsQueued++;
+                    }
+                    else
+                    {
+                        skipped++;
+                    }
+                }
+
+                continue;
+            }
+
+            if (Draft?.IsLocked == true)
+            {
+                _pending.Add(transaction);
             }
             else
             {
-                skipped++;
+                _imported.Add(transaction);
             }
+
+            added++;
         }
 
         Recompute();
-        return (added, skipped);
+        return new ImportResult(added, skipped, updated, correctionsQueued);
     }
 
     /// <summary>Corrects imported category data in the editable draft and recomputes immediately.</summary>
@@ -100,6 +171,75 @@ public sealed class WorkflowSession
             Category = category.Trim(),
             Subcategory = subcategory.Trim(),
         };
+        Recompute();
+    }
+
+    /// <summary>Records the actual signed GBP amount for a non-GBP transaction.</summary>
+    public void SetActualGbpAmount(string transactionId, decimal actualGbpAmount)
+    {
+        EnsureEditable("Actual GBP amounts");
+        int index = FindById(_imported, transactionId);
+        if (index < 0)
+        {
+            throw new InvalidOperationException($"Transaction {transactionId} is not in the current draft.");
+        }
+
+        if (_imported[index].Currency.Trim().Equals("GBP", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("An actual GBP amount is only required for a non-GBP transaction.");
+        }
+
+        _imported[index] = _imported[index] with { ActualGbpAmount = actualGbpAmount };
+        Recompute();
+    }
+
+    /// <summary>Accepts a queued correction as reversing and replacement adjustments in the editable draft.</summary>
+    public void AcceptPendingCorrection(string transactionId)
+    {
+        EnsureEditable("Pending corrections");
+        int index = _pendingCorrections.FindIndex(correction =>
+            string.Equals(correction.Original.Id, transactionId, StringComparison.Ordinal));
+        if (index < 0)
+        {
+            throw new InvalidOperationException($"Transaction {transactionId} has no pending correction.");
+        }
+
+        PendingTransactionCorrection correction = _pendingCorrections[index];
+        string reversalId = $"adjustment:{transactionId}:reversal";
+        string replacementId = $"adjustment:{transactionId}:replacement";
+        if (_imported.Any(transaction => transaction.Id == reversalId || transaction.Id == replacementId))
+        {
+            throw new InvalidOperationException($"Transaction {transactionId} already has an adjustment in this draft.");
+        }
+
+        Transaction reversal = correction.Original with
+        {
+            Id = reversalId,
+            Amount = -correction.Original.Amount,
+            Type = "Correction reversal",
+            LinkedTransactionId = transactionId,
+            FundingSource = null,
+            Settled = false,
+            RequiresReview = false,
+            ActualGbpAmount = correction.Original.ActualGbpAmount is { } amount ? -amount : null,
+        };
+        Transaction replacement = correction.Updated with
+        {
+            Id = replacementId,
+            Type = "Correction replacement",
+            LinkedTransactionId = transactionId,
+            FundingSource = null,
+            Settled = false,
+            RequiresReview = false,
+        };
+        _imported.Add(reversal);
+        _imported.Add(replacement);
+        if (correction.Original.FundingSource is { } originalSource)
+        {
+            _overrides[reversalId] = originalSource;
+        }
+
+        _pendingCorrections.RemoveAt(index);
         Recompute();
     }
 
@@ -230,6 +370,11 @@ public sealed class WorkflowSession
             return;
         }
 
+        if (!Draft.IsLocked && _pendingCorrections.Count > 0)
+        {
+            throw new InvalidOperationException("Review every pending transaction correction before confirming transfers.");
+        }
+
         Account? sourceAccount = Accounts.FirstOrDefault(account => account.Name == source);
         bool isPersonal = sourceAccount?.Role is AccountRole.PrimaryPersonal or AccountRole.PersonalSavings;
         if (Plan.Shortfalls.Any(shortfall => shortfall.AccountName == source
@@ -260,8 +405,53 @@ public sealed class WorkflowSession
             return;
         }
 
-        Draft = ReconciliationEngine.AcknowledgeCardPaid(Draft);
-        _completed.Add(Draft);
+        ReconciliationDraft completed = ReconciliationEngine.AcknowledgeCardPaid(Draft);
+        _completed.Add(completed);
+        HashSet<string> completedIds = completed.Transactions
+            .Select(transaction => transaction.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        _imported.Clear();
+        _imported.AddRange(_pending);
+        _pending.Clear();
+        foreach (string id in completedIds)
+        {
+            _overrides.Remove(id);
+        }
+
+        Draft = null;
+        Recompute();
+    }
+
+    /// <summary>Reopens the latest completion when no newer reconciliation activity exists.</summary>
+    public void ReopenLatestCompleted()
+    {
+        if (_completed.Count == 0)
+        {
+            throw new InvalidOperationException("There is no completed reconciliation to reopen.");
+        }
+
+        if (_imported.Count != 0 || _pending.Count != 0 || _pendingCorrections.Count != 0)
+        {
+            throw new InvalidOperationException("The latest reconciliation cannot be reopened after a newer reconciliation has started.");
+        }
+
+        ReconciliationDraft completed = _completed[^1];
+        _completed.RemoveAt(_completed.Count - 1);
+        List<Transaction> reopenedTransactions = [.. completed.Transactions
+            .Select(transaction => transaction with { Settled = false })];
+        List<Transfer> reopenedTransfers = [.. completed.Transfers
+            .Select(transfer => transfer.Kind == TransferKind.CardPayment
+                ? transfer with { Acknowledged = false }
+                : transfer)];
+        _imported.AddRange(reopenedTransactions);
+        CardPaymentTarget = completed.CardPaymentTarget;
+        Draft = completed with
+        {
+            Transactions = reopenedTransactions,
+            Transfers = reopenedTransfers,
+            IsSettled = false,
+            IsLocked = true,
+        };
         Recompute();
     }
 
@@ -276,7 +466,8 @@ public sealed class WorkflowSession
         _overrides,
         Draft,
         _completed,
-        ThemeSettings.Load());
+        ThemeSettings.Load(),
+        _pendingCorrections);
 
     /// <summary>Restores a previously saved workflow without re-deriving funding sources.</summary>
     public void FromState(ScenarioState state)
@@ -297,6 +488,8 @@ public sealed class WorkflowSession
 
         _completed.Clear();
         _completed.AddRange(state.CompletedReconciliations);
+        _pendingCorrections.Clear();
+        _pendingCorrections.AddRange(state.PendingCorrections ?? []);
         Draft = state.Draft;
 
         if (Draft is not null)
@@ -317,4 +510,44 @@ public sealed class WorkflowSession
             throw new InvalidOperationException($"{subject} cannot change after the first transfer locks the reconciliation.");
         }
     }
+
+    private static int FindById(List<Transaction> transactions, string id) =>
+        transactions.FindIndex(transaction => string.Equals(transaction.Id, id, StringComparison.Ordinal));
+
+    private bool QueueCorrection(Transaction original, Transaction updated)
+    {
+        int index = _pendingCorrections.FindIndex(correction =>
+            string.Equals(correction.Original.Id, original.Id, StringComparison.Ordinal));
+        if (index >= 0)
+        {
+            if (SameImportedFields(_pendingCorrections[index].Updated, updated))
+            {
+                return false;
+            }
+
+            _pendingCorrections[index] = new PendingTransactionCorrection(original, updated);
+            return true;
+        }
+
+        _pendingCorrections.Add(new PendingTransactionCorrection(original, updated));
+        return true;
+    }
+
+    private static bool SameImportedFields(Transaction left, Transaction right) =>
+        left.Id == right.Id
+        && left.Date == right.Date
+        && left.Amount == right.Amount
+        && left.Account == right.Account
+        && left.Bank == right.Bank
+        && left.Currency == right.Currency
+        && left.Category == right.Category
+        && left.Subcategory == right.Subcategory
+        && left.Type == right.Type
+        && left.Tags == right.Tags
+        && left.Counterparty == right.Counterparty
+        && left.CustomName == right.CustomName
+        && left.Merchant == right.Merchant
+        && left.AdditionalDetails == right.AdditionalDetails
+        && left.Notes == right.Notes
+        && left.LinkedTransactionId == right.LinkedTransactionId;
 }

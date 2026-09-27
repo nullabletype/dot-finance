@@ -83,7 +83,8 @@ public static class ReconciliationEngine
                 && sourceById.TryGetValue(linked, out FundingSource original)
                     ? original
                     : ResolveSource(transaction, categoryRules, subcategoryRules, overrides);
-            bool requiresReview = source is null && !IsExcluded(transaction);
+            bool requiresReview = !IsExcluded(transaction)
+                && (source is null || RequiresActualGbpAmount(transaction));
             result.Add(transaction with { FundingSource = source, RequiresReview = requiresReview });
         }
 
@@ -182,7 +183,7 @@ public static class ReconciliationEngine
                     .Where(transaction => transaction.FundingSource == category.FundingSource
                         && (string.Equals(transaction.Subcategory, category.Name, StringComparison.OrdinalIgnoreCase)
                             || string.Equals(transaction.Category, category.Name, StringComparison.OrdinalIgnoreCase)))
-                    .Sum(transaction => -transaction.Amount)))
+                    .Sum(transaction => -EffectiveGbpAmount(transaction))))
             .OrderBy(subtotal => subtotal.Name, StringComparer.Ordinal)];
 
         return new TransferPlan(
@@ -200,7 +201,7 @@ public static class ReconciliationEngine
         allocated
             .Where(transaction => !IsExcluded(transaction)
                 && string.Equals(transaction.Account, cardAccountName, StringComparison.Ordinal))
-            .Sum(transaction => transaction.Amount);
+            .Sum(EffectiveGbpAmount);
 
     /// <summary>Net new card spending imported in this reconciliation (positive for spending).</summary>
     public static decimal NetImportedSpending(IReadOnlyList<Transaction> allocated, string cardAccountName) =>
@@ -255,6 +256,11 @@ public static class ReconciliationEngine
             throw new InvalidOperationException("Acknowledge the payment-target discrepancy before confirming transfers.");
         }
 
+        if (draft.Transactions.Any(transaction => transaction.RequiresReview))
+        {
+            throw new InvalidOperationException("Resolve every transaction requiring review before confirming transfers.");
+        }
+
         if (!draft.Transfers.Any(transfer => transfer.Source == source && transfer.Kind == kind))
         {
             throw new InvalidOperationException($"No {kind} transfer exists for {source}.");
@@ -297,6 +303,11 @@ public static class ReconciliationEngine
         if (draft.IsSettled)
         {
             throw new InvalidOperationException("The reconciliation is already settled.");
+        }
+
+        if (draft.Transactions.Any(transaction => transaction.RequiresReview))
+        {
+            throw new InvalidOperationException("Resolve every transaction requiring review before confirming the card payment.");
         }
 
         if (!draft.IsLocked || draft.Transfers.Any(transfer => transfer.Kind != TransferKind.CardPayment && !transfer.Acknowledged))
@@ -369,16 +380,16 @@ public static class ReconciliationEngine
         decimal purchases = matches
             .Where(transaction => !IsRefund(transaction)
                 && string.Equals(transaction.Account, cardAccountName, StringComparison.Ordinal))
-            .Sum(transaction => -transaction.Amount);
+            .Sum(transaction => -EffectiveGbpAmount(transaction));
 
         decimal reimbursements = matches
             .Where(transaction => !IsRefund(transaction)
                 && !string.Equals(transaction.Account, cardAccountName, StringComparison.Ordinal))
-            .Sum(transaction => -transaction.Amount);
+            .Sum(transaction => -EffectiveGbpAmount(transaction));
 
         decimal refunds = matches
             .Where(IsRefund)
-            .Sum(transaction => -transaction.Amount);
+            .Sum(transaction => -EffectiveGbpAmount(transaction));
 
         return new SourceContribution(source, purchases, reimbursements, refunds, purchases + reimbursements + refunds);
     }
@@ -440,4 +451,13 @@ public static class ReconciliationEngine
     private static bool IsRefund(Transaction transaction) =>
         transaction.Amount > 0m
         || transaction.Type.Trim().Equals("Refund", StringComparison.OrdinalIgnoreCase);
+
+    private static bool RequiresActualGbpAmount(Transaction transaction) =>
+        !transaction.Currency.Trim().Equals("GBP", StringComparison.OrdinalIgnoreCase)
+        && transaction.ActualGbpAmount is null;
+
+    public static decimal EffectiveGbpAmount(Transaction transaction) =>
+        transaction.Currency.Trim().Equals("GBP", StringComparison.OrdinalIgnoreCase)
+            ? transaction.Amount
+            : transaction.ActualGbpAmount ?? 0m;
 }

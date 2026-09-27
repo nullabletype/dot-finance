@@ -165,6 +165,55 @@ public sealed class ReconciliationEngineTests
         Assert.False(draft.IsLocked);
     }
 
+    [Fact]
+    public void Required_review_blocks_transfer_and_card_acknowledgements()
+    {
+        IReadOnlyList<Transaction> allocated = ReconciliationEngine.Allocate(
+            [Tx("u1", -25m, string.Empty)],
+            CategoryRules(),
+            [],
+            null);
+        ReconciliationDraft draft = ReconciliationEngine.BuildDraft(25m, Card, BaseAccounts(), allocated, Reporting());
+
+        InvalidOperationException transferException = Assert.Throws<InvalidOperationException>(
+            () => ReconciliationEngine.AcknowledgeTransfer(draft, "Primary", TransferKind.Funding));
+        ReconciliationDraft artificiallyLocked = draft with
+        {
+            IsLocked = true,
+            Transfers = [.. draft.Transfers.Select(transfer => transfer.Kind == TransferKind.CardPayment
+                ? transfer
+                : transfer with { Acknowledged = true })],
+        };
+        InvalidOperationException cardException = Assert.Throws<InvalidOperationException>(
+            () => ReconciliationEngine.AcknowledgeCardPaid(artificiallyLocked));
+
+        Assert.Contains("review", transferException.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("review", cardException.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(draft.IsLocked);
+        Assert.False(draft.IsSettled);
+    }
+
+    [Fact]
+    public void Non_gbp_amount_stays_in_review_until_actual_gbp_value_is_supplied()
+    {
+        Transaction imported = Tx("fx1", -300m, "Groceries", currency: "EUR");
+
+        Transaction requiringReview = Assert.Single(ReconciliationEngine.Allocate([imported], CategoryRules(), [], null));
+        Transaction resolved = Assert.Single(ReconciliationEngine.Allocate(
+            [imported with { ActualGbpAmount = -275m }],
+            CategoryRules(),
+            [],
+            null));
+        TransferPlan plan = ComputePlan([resolved]);
+
+        Assert.True(requiringReview.RequiresReview);
+        Assert.Equal(0m, ReconciliationEngine.EffectiveGbpAmount(requiringReview));
+        Assert.False(resolved.RequiresReview);
+        Assert.Equal(-275m, ReconciliationEngine.EffectiveGbpAmount(resolved));
+        Assert.Equal(275m, Plan(plan, FundingSource.Joint).Total);
+        Assert.Equal(275m, -ReconciliationEngine.NetCardTotal([resolved], Card));
+    }
+
     private static ReconciliationDraft AcknowledgeAllFunding(ReconciliationDraft draft)
     {
         ReconciliationDraft current = draft.DiscrepancyAcknowledged
@@ -226,14 +275,15 @@ public sealed class ReconciliationEngineTests
         string subcategory = "",
         string type = "Purchase",
         string linked = "",
-        string account = Card) =>
+        string account = Card,
+        string currency = "GBP") =>
         new(
             id,
             new DateOnly(2026, 9, 1),
             amount,
             account,
             "Example Bank",
-            "GBP",
+            currency,
             category,
             subcategory,
             type,
