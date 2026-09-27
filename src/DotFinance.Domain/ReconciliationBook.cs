@@ -12,10 +12,23 @@ public sealed record ReconciliationSnapshot(string Id, DateOnly Date, bool Locke
     ImmutableArray<AccountBalance> InitialBalances, ImmutableArray<AccountBalance> CurrentBalances,
     FundingPlan Plan, ImmutableArray<FundingTransfer> Transfers, bool DiscrepancyAcknowledged,
     ImmutableArray<ReviewItem> Reviews);
+public sealed record FundingConfigurationState(string CardAccountId, ImmutableArray<FundingAccount> Accounts);
+public sealed record AllocationRulesState(ImmutableArray<CategoryRule> Categories,
+    ImmutableArray<SubcategoryRule> Subcategories, ImmutableArray<ReportingCategory> Reporting);
+public sealed record FundingOverride(string TransactionId, FundingSource Source);
+public sealed record ReconciliationBookState(int Version, FundingConfigurationState Configuration,
+    AllocationRulesState Rules, ImmutableArray<ImportedTransaction> Records,
+    ImmutableArray<string> SettledTransactionIds, ImmutableArray<AllocatedTransaction> EffectiveTransactions,
+    ImmutableArray<PendingCorrection> PendingCorrections, ImmutableArray<ImportConflict> ImportConflicts,
+    ImmutableArray<FundingOverride> Overrides, ImmutableArray<ReconciliationSnapshot> History,
+    ImmutableArray<AcceptedCorrection> AcceptedCorrections, ImmutableArray<string> UsedReconciliationIds,
+    ImmutableArray<Adjustment> CurrentAdjustments, ImmutableArray<string> ActiveTransactionIds,
+    int AdjustmentSequence, ReconciliationSnapshot? Current, ImmutableArray<AllocatedTransaction> SettledBaseline);
 
 /// <summary>Owns one unfinished reconciliation and immutable completed snapshots. No I/O or system clock.</summary>
 public sealed class ReconciliationBook(FundingConfiguration configuration, AllocationRules rules)
 {
+    public const int CurrentStateVersion = 1;
     private readonly Dictionary<string, ImportedTransaction> _records = new(StringComparer.Ordinal);
     private readonly HashSet<string> _settled = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AllocatedTransaction> _effective = new(StringComparer.Ordinal);
@@ -41,6 +54,101 @@ public sealed class ReconciliationBook(FundingConfiguration configuration, Alloc
     public bool CanReopenLatest => Current is null && _history.Count > 0;
     public bool IsSettled(string transactionId) => _settled.Contains(transactionId);
     public bool IsReserved(string transactionId) => Current?.Locked == true && _activeIds.Contains(transactionId);
+
+    public ReconciliationBookState ExportState() => new(CurrentStateVersion,
+        new(Configuration.CardAccountId, Configuration.Accounts),
+        new(_rules.Categories, _rules.Subcategories, _rules.Reporting),
+        [.. _records.Values.OrderBy(x => x.Id, StringComparer.Ordinal)],
+        [.. _settled.Order(StringComparer.Ordinal)],
+        [.. _effective.Values.OrderBy(x => x.Transaction.Id, StringComparer.Ordinal)],
+        PendingCorrections, ImportConflicts,
+        [.. _overrides.OrderBy(x => x.Key, StringComparer.Ordinal).Select(x => new FundingOverride(x.Key, x.Value))],
+        History, AcceptedCorrections, [.. _usedIds.Order(StringComparer.Ordinal)],
+        [.. _adjustments], [.. _activeIds.Order(StringComparer.Ordinal)], _adjustmentSequence,
+        Current, SettledBaseline);
+
+    public static ReconciliationBook Restore(ReconciliationBookState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        if (state.Version != CurrentStateVersion)
+            throw new InvalidDataException("The reconciliation state version is not supported.");
+        EnsureInitialised(state);
+
+        FundingConfiguration configuration = new(state.Configuration.CardAccountId, state.Configuration.Accounts);
+        AllocationRules rules = new(state.Rules.Categories, state.Rules.Subcategories, state.Rules.Reporting);
+        ReconciliationBook book = new(configuration, rules);
+
+        AddUnique(state.Records, x => x.Id, book._records, DomainGuard.Transaction);
+        AddUnique(state.EffectiveTransactions, x => x.Transaction.Id, book._effective, ValidateAllocated);
+        AddUnique(state.PendingCorrections, x => x.TransactionId, book._corrections, ValidateCorrection);
+        AddUnique(state.ImportConflicts, x => x.TransactionId, book._conflicts, ValidateConflict);
+        AddUniqueMapped(state.Overrides, x => x.TransactionId, book._overrides, value => DomainGuard.Defined(value.Source), value => value.Source);
+
+        AddUniqueValues(state.SettledTransactionIds, book._settled, "Settled transaction identities must be unique.");
+        AddUniqueValues(state.UsedReconciliationIds, book._usedIds, "Used reconciliation identities must be unique.");
+        AddUniqueValues(state.ActiveTransactionIds, book._activeIds, "Active transaction identities must be unique.");
+        book._history.AddRange(state.History);
+        book._acceptedCorrections.AddRange(state.AcceptedCorrections);
+        book._adjustments.AddRange(state.CurrentAdjustments);
+        book._adjustmentSequence = state.AdjustmentSequence;
+        book.Current = state.Current;
+        book.SettledBaseline = state.SettledBaseline;
+        book.ValidateRestoredState();
+        return book;
+
+        static void AddUnique<T>(IEnumerable<T> values, Func<T, string> key, IDictionary<string, T> destination, Action<T> validate)
+        {
+            foreach (T value in values)
+            {
+                validate(value);
+                if (!destination.TryAdd(key(value), value)) throw new InvalidDataException("Persisted identities must be unique.");
+            }
+        }
+
+        static void AddUniqueMapped<T, TValue>(IEnumerable<T> values, Func<T, string> key, IDictionary<string, TValue> destination,
+            Action<T> validate, Func<T, TValue> select)
+        {
+            foreach (T value in values)
+            {
+                validate(value);
+                if (!destination.TryAdd(key(value), select(value))) throw new InvalidDataException("Persisted identities must be unique.");
+            }
+        }
+
+        static void AddUniqueValues(IEnumerable<string> values, ISet<string> destination, string message)
+        {
+            foreach (string value in values)
+            {
+                DomainGuard.Text(value);
+                if (!destination.Add(value)) throw new InvalidDataException(message);
+            }
+        }
+
+        static void ValidateAllocated(AllocatedTransaction value)
+        {
+            DomainGuard.Transaction(value.Transaction);
+            if (value.Source is { } source) DomainGuard.Defined(source);
+            DomainGuard.Gbp(value.CostGbp);
+            DomainGuard.Gbp(value.CardCostGbp);
+        }
+
+        static void ValidateCorrection(PendingCorrection value)
+        {
+            DomainGuard.Text(value.TransactionId);
+            DomainGuard.Transaction(value.Original);
+            DomainGuard.Transaction(value.Proposed);
+            if (value.Original.Id != value.TransactionId || value.Proposed.Id != value.TransactionId)
+                throw new InvalidDataException("A correction must retain its transaction identity.");
+        }
+
+        static void ValidateConflict(ImportConflict value)
+        {
+            DomainGuard.Text(value.TransactionId);
+            if (value.Candidates.Length < 2 || value.Candidates.Any(x => x.Id != value.TransactionId))
+                throw new InvalidDataException("An import conflict must contain competing versions of one transaction.");
+            foreach (ImportedTransaction candidate in value.Candidates) DomainGuard.Transaction(candidate);
+        }
+    }
 
     public void ImportSettledBaseline(IEnumerable<ImportedTransaction> transactions, bool confirmedAlreadySettled)
     {
@@ -275,6 +383,80 @@ public sealed class ReconciliationBook(FundingConfiguration configuration, Alloc
         foreach (string id in _activeIds) _settled.Remove(id);
         _adjustments.AddRange(completed.Adjustments);
         RefreshProjection(); // Balances remain current: reopening never reverses a real payment.
+    }
+
+    private static void EnsureInitialised(ReconciliationBookState state)
+    {
+        if (state.Configuration is null || state.Rules is null
+            || state.Configuration.Accounts.IsDefault || state.Rules.Categories.IsDefault
+            || state.Rules.Subcategories.IsDefault || state.Rules.Reporting.IsDefault
+            || state.Records.IsDefault || state.SettledTransactionIds.IsDefault
+            || state.EffectiveTransactions.IsDefault || state.PendingCorrections.IsDefault
+            || state.ImportConflicts.IsDefault || state.Overrides.IsDefault || state.History.IsDefault
+            || state.AcceptedCorrections.IsDefault || state.UsedReconciliationIds.IsDefault
+            || state.CurrentAdjustments.IsDefault || state.ActiveTransactionIds.IsDefault
+            || state.SettledBaseline.IsDefault)
+            throw new InvalidDataException("The reconciliation state is incomplete.");
+    }
+
+    private void ValidateRestoredState()
+    {
+        HashSet<string> recordIds = [.. _records.Keys];
+        if (!_settled.IsSubsetOf(recordIds) || !_activeIds.IsSubsetOf(recordIds)
+            || _effective.Keys.Any(id => !recordIds.Contains(id))
+            || _corrections.Keys.Any(id => !recordIds.Contains(id))
+            || _overrides.Keys.Any(id => !recordIds.Contains(id)))
+            throw new InvalidDataException("Persisted transaction references are inconsistent.");
+        if (_effective.Any(x => _records[x.Key] != x.Value.Transaction)
+            || _corrections.Any(x => _records[x.Key] != x.Value.Original))
+            throw new InvalidDataException("Persisted transaction versions are inconsistent.");
+
+        foreach (ReconciliationSnapshot snapshot in _history) ValidateSnapshot(snapshot, completed: true);
+        if (_history.Select(x => x.Id).Distinct(StringComparer.Ordinal).Count() != _history.Count)
+            throw new InvalidDataException("Completed reconciliation identities must be unique.");
+        if (_history.Any(x => !_usedIds.Contains(x.Id))
+            || Current is not null && !_usedIds.Contains(Current.Id))
+            throw new InvalidDataException("Reconciliation identity history is incomplete.");
+        if (_history.SelectMany(x => x.Transactions).Any(x => !_settled.Contains(x.Transaction.Id))
+            || SettledBaseline.Any(x => !_settled.Contains(x.Transaction.Id)))
+            throw new InvalidDataException("Completed transaction settlement state is inconsistent.");
+
+        foreach (AllocatedTransaction row in SettledBaseline)
+        {
+            DomainGuard.Transaction(row.Transaction);
+            if (!_effective.TryGetValue(row.Transaction.Id, out AllocatedTransaction? effective) || effective is null)
+                throw new InvalidDataException("Settled baseline transactions require an effective allocation.");
+        }
+
+        if (Current is null)
+        {
+            if (_activeIds.Count != 0 || _adjustments.Count != 0)
+                throw new InvalidDataException("Active state requires an unfinished reconciliation.");
+        }
+        else
+        {
+            ValidateSnapshot(Current, completed: false);
+            HashSet<string> currentIds = [.. Current.Transactions.Select(x => x.Transaction.Id)];
+            if (!currentIds.SetEquals(_activeIds) || currentIds.Any(_settled.Contains)
+                || !Current.Adjustments.SequenceEqual(_adjustments))
+                throw new InvalidDataException("The unfinished reconciliation state is inconsistent.");
+        }
+
+        if (_acceptedCorrections.Any(x => x.Sequence <= 0 || x.Sequence > _adjustmentSequence)
+            || _acceptedCorrections.Select(x => x.Sequence).Distinct().Count() != _acceptedCorrections.Count)
+            throw new InvalidDataException("Correction sequence history is inconsistent.");
+        if (_adjustments.Select(x => x.Id).Distinct(StringComparer.Ordinal).Count() != _adjustments.Count)
+            throw new InvalidDataException("Current adjustment identities must be unique.");
+
+        static void ValidateSnapshot(ReconciliationSnapshot snapshot, bool completed)
+        {
+            DomainGuard.Text(snapshot.Id);
+            if (snapshot.Date == default || snapshot.Transactions.IsDefault || snapshot.Adjustments.IsDefault
+                || snapshot.InitialBalances.IsDefault || snapshot.CurrentBalances.IsDefault
+                || snapshot.Transfers.IsDefault || snapshot.Reviews.IsDefault
+                || snapshot.CardPaid != completed || completed && !snapshot.Locked)
+                throw new InvalidDataException("A persisted reconciliation snapshot is invalid.");
+        }
     }
 
     private ReconciliationSnapshot RequireCurrent() => Current ?? throw new InvalidOperationException("Start a reconciliation first.");

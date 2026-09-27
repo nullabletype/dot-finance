@@ -9,7 +9,7 @@ using Avalonia.Threading;
 
 namespace DotFinance.Desktop;
 
-internal sealed class App(string? evidenceDirectory) : Application
+internal sealed class App(string? evidenceDirectory) : Avalonia.Application
 {
     public override void Initialize() => Styles.Add(new FluentTheme());
 
