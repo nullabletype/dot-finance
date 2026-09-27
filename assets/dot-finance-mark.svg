@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-labelledby="title desc">
+  <title id="title">dot-finance mark</title>
+  <desc id="desc">An open rounded statement with two ledger lines and a mint dot at its upper endpoint.</desc>
+  <path
+    d="M 25 5.8 H 10.2 A 4.4 4.4 0 0 0 5.8 10.2 V 21.8 A 4.4 4.4 0 0 0 10.2 26.2 H 25"
+    fill="none"
+    stroke="#ff4fa3"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="3.2" />
+  <path
+    d="M 11 13 H 22 M 11 20 H 22"
+    fill="none"
+    stroke="#ff4fa3"
+    stroke-linecap="round"
+    stroke-width="3.2" />
+  <circle cx="25" cy="5.8" r="3.5" fill="#7ce7b2" />
+</svg>

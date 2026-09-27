@@ -14,17 +14,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        os: [macos-15, windows-2025, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-dotnet@v6.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '24.15.0'
+          node-version: '24.21.0'
           cache: npm
       - run: npm ci
       - name: Linux desktop prerequisites
@@ -44,101 +44,111 @@ jobs:
           fi
       - name: Native launch (Linux virtual display)
         if: runner.os == 'Linux'
-        run: xvfb-run -a npm run smoke
+        run: |
+          xvfb-run -a npm run smoke
+          xvfb-run -a npm run workflow:smoke
       - name: Native launch (macOS and Windows)
         if: runner.os != 'Linux'
-        run: npm run smoke
-      - name: Preserve evidence and build outputs
-        if: always()
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: prototype-${{ matrix.os }}-${{ github.sha }}
-          path: |
-            artifacts/architecture/
-            artifacts/desktop/
-            artifacts/launch-*/
-            artifacts/persistence-local/
-            artifacts/offline-network/
-            artifacts/build.json
-          retention-days: 7
-          if-no-files-found: error
-
+        run: |
+          npm run smoke
+          npm run workflow:smoke
   persistence-macos:
     name: Backup cycle (macOS start)
     needs: desktop
-    runs-on: macos-latest
+    runs-on: macos-15
+    outputs:
+      backup: ${{ steps.backup.outputs.data }}
     steps:
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          name: prototype-macos-latest-${{ github.sha }}
-          path: build
-      - run: mkdir -p cycle && DOT_FINANCE_PROTOTYPE_PASSWORD=synthetic-ci-password-not-a-user-secret dotnet build/desktop/DesktopShell.dll --persistence-cycle initialize cycle build/desktop/Fixtures/synthetic-emma.csv
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: persistence-cycle-macos-${{ github.sha }}
-          path: cycle/
-          retention-days: 7
+          global-json-file: global.json
+      - run: dotnet restore prototypes/DesktopShell/DesktopShell.csproj --locked-mode
+      - run: dotnet run --project prototypes/DesktopShell/DesktopShell.csproj --no-restore --configuration Release -- --persistence-cycle initialize cycle prototypes/DesktopShell/Fixtures/synthetic-emma.csv
+        env:
+          DOT_FINANCE_PROTOTYPE_PASSWORD: synthetic-ci-password-not-a-user-secret
+      - name: Pass encrypted backup to Windows job
+        id: backup
+        shell: pwsh
+        run: |
+          $data = [Convert]::ToBase64String([IO.File]::ReadAllBytes('cycle/portable.dotfinance-backup'))
+          "data=$data" >> $env:GITHUB_OUTPUT
 
   persistence-windows:
     name: Backup cycle (Windows restore)
     needs: persistence-macos
-    runs-on: windows-latest
+    runs-on: windows-2025
+    outputs:
+      backup: ${{ steps.backup.outputs.data }}
     steps:
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          name: prototype-windows-latest-${{ github.sha }}
-          path: build
-      - uses: actions/download-artifact@v8.0.1
-        with:
-          name: persistence-cycle-macos-${{ github.sha }}
-          path: incoming
-      - shell: pwsh
+          global-json-file: global.json
+      - run: dotnet restore prototypes/DesktopShell/DesktopShell.csproj --locked-mode
+      - name: Receive encrypted backup from macOS job
+        shell: pwsh
+        env:
+          BACKUP_DATA: ${{ needs.persistence-macos.outputs.backup }}
         run: |
-          New-Item -ItemType Directory -Force cycle | Out-Null
-          $env:DOT_FINANCE_PROTOTYPE_PASSWORD = 'synthetic-ci-password-not-a-user-secret'
-          dotnet build/desktop/DesktopShell.dll --persistence-cycle continue cycle build/desktop/Fixtures/synthetic-emma.csv incoming/portable.dotfinance-backup
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: persistence-cycle-windows-${{ github.sha }}
-          path: cycle/
-          retention-days: 7
+          New-Item -ItemType Directory -Force incoming | Out-Null
+          [IO.File]::WriteAllBytes('incoming/portable.dotfinance-backup', [Convert]::FromBase64String($env:BACKUP_DATA))
+      - run: dotnet run --project prototypes/DesktopShell/DesktopShell.csproj --no-restore --configuration Release -- --persistence-cycle continue cycle prototypes/DesktopShell/Fixtures/synthetic-emma.csv incoming/portable.dotfinance-backup
+        env:
+          DOT_FINANCE_PROTOTYPE_PASSWORD: synthetic-ci-password-not-a-user-secret
+      - name: Pass encrypted backup to Linux job
+        id: backup
+        shell: pwsh
+        run: |
+          $data = [Convert]::ToBase64String([IO.File]::ReadAllBytes('cycle/portable.dotfinance-backup'))
+          "data=$data" >> $env:GITHUB_OUTPUT
 
   persistence-linux:
     name: Backup cycle (Linux restore)
     needs: persistence-windows
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    outputs:
+      backup: ${{ steps.backup.outputs.data }}
     steps:
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          name: prototype-ubuntu-latest-${{ github.sha }}
-          path: build
-      - uses: actions/download-artifact@v8.0.1
-        with:
-          name: persistence-cycle-windows-${{ github.sha }}
-          path: incoming
-      - run: mkdir -p cycle && DOT_FINANCE_PROTOTYPE_PASSWORD=synthetic-ci-password-not-a-user-secret dotnet build/desktop/DesktopShell.dll --persistence-cycle continue cycle build/desktop/Fixtures/synthetic-emma.csv incoming/portable.dotfinance-backup
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: persistence-cycle-linux-${{ github.sha }}
-          path: cycle/
-          retention-days: 7
+          global-json-file: global.json
+      - run: dotnet restore prototypes/DesktopShell/DesktopShell.csproj --locked-mode
+      - name: Receive encrypted backup from Windows job
+        shell: pwsh
+        env:
+          BACKUP_DATA: ${{ needs.persistence-windows.outputs.backup }}
+        run: |
+          New-Item -ItemType Directory -Force incoming | Out-Null
+          [IO.File]::WriteAllBytes('incoming/portable.dotfinance-backup', [Convert]::FromBase64String($env:BACKUP_DATA))
+      - run: dotnet run --project prototypes/DesktopShell/DesktopShell.csproj --no-restore --configuration Release -- --persistence-cycle continue cycle prototypes/DesktopShell/Fixtures/synthetic-emma.csv incoming/portable.dotfinance-backup
+        env:
+          DOT_FINANCE_PROTOTYPE_PASSWORD: synthetic-ci-password-not-a-user-secret
+      - name: Pass encrypted backup to final macOS job
+        id: backup
+        shell: pwsh
+        run: |
+          $data = [Convert]::ToBase64String([IO.File]::ReadAllBytes('cycle/portable.dotfinance-backup'))
+          "data=$data" >> $env:GITHUB_OUTPUT
 
   persistence-macos-final:
     name: Backup cycle (macOS final restore)
     needs: persistence-linux
-    runs-on: macos-latest
+    runs-on: macos-15
     steps:
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          name: prototype-macos-latest-${{ github.sha }}
-          path: build
-      - uses: actions/download-artifact@v8.0.1
-        with:
-          name: persistence-cycle-linux-${{ github.sha }}
-          path: incoming
-      - run: mkdir -p cycle && DOT_FINANCE_PROTOTYPE_PASSWORD=synthetic-ci-password-not-a-user-secret dotnet build/desktop/DesktopShell.dll --persistence-cycle verify cycle build/desktop/Fixtures/synthetic-emma.csv incoming/portable.dotfinance-backup
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: persistence-cycle-final-${{ github.sha }}
-          path: cycle/
-          retention-days: 7
+          global-json-file: global.json
+      - run: dotnet restore prototypes/DesktopShell/DesktopShell.csproj --locked-mode
+      - name: Receive encrypted backup from Linux job
+        shell: pwsh
+        env:
+          BACKUP_DATA: ${{ needs.persistence-linux.outputs.backup }}
+        run: |
+          New-Item -ItemType Directory -Force incoming | Out-Null
+          [IO.File]::WriteAllBytes('incoming/portable.dotfinance-backup', [Convert]::FromBase64String($env:BACKUP_DATA))
+      - run: dotnet run --project prototypes/DesktopShell/DesktopShell.csproj --no-restore --configuration Release -- --persistence-cycle verify cycle prototypes/DesktopShell/Fixtures/synthetic-emma.csv incoming/portable.dotfinance-backup
+        env:
+          DOT_FINANCE_PROTOTYPE_PASSWORD: synthetic-ci-password-not-a-user-secret

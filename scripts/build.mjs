@@ -25,7 +25,7 @@ run(process.execPath, ['scripts/check-invalid-model.mjs']);
 run(process.execPath, [cli, 'build', 'docs/architecture', '-o', 'artifacts/architecture', '--base', './']);
 run('dotnet', ['restore', tests, '--locked-mode']);
 run('dotnet', ['build', project, '--no-restore', '--configuration', 'Release', '--warnaserror']);
-run('dotnet', ['test', tests, '--no-restore', '--configuration', 'Release', '--warnaserror']);
+run('dotnet', ['test', '--project', tests, '--no-restore', '--configuration', 'Release']);
 run('dotnet', ['format', tests, '--verify-no-changes', '--no-restore', '--severity', 'info']);
 rmSync('artifacts/desktop', { recursive: true, force: true });
 run('dotnet', ['publish', project, '--no-build', '--configuration', 'Release', '--output', 'artifacts/desktop']);
