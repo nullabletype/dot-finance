@@ -22,11 +22,11 @@ model {
     }
     workflow = component 'Guided workflow session' {
       technology 'C#'
-      description 'Owns the editable draft, accepted corrections and overrides, discrepancy acknowledgement, locking, pending imports, settlement and completed history.'
+      description 'Owns the editable draft, accepted corrections and overrides, explicit GBP values, discrepancy acknowledgement, locking, pending imports and re-import corrections, settlement, next-draft promotion and bounded reopening.'
     }
     engine = component 'Reconciliation engine' {
       technology 'Pure C# calculations'
-      description 'Allocates transactions and calculates contributions, protected-balance shortfalls, frozen transfers and remaining-step projections.'
+      description 'Allocates transactions, blocks unresolved review items, and calculates GBP contributions, protected-balance shortfalls, frozen transfers and remaining-step projections.'
     }
     settings = component 'Theme settings' {
       technology 'Local JSON'
