@@ -18,7 +18,11 @@
     "architecture:format": "likec4 format docs/architecture",
     "architecture:check": "likec4 format --check docs/architecture && likec4 validate docs/architecture",
     "architecture:build": "likec4 build docs/architecture -o artifacts/architecture --base ./",
-    "architecture:negative-check": "node scripts/check-invalid-model.mjs"
+    "architecture:negative-check": "node scripts/check-invalid-model.mjs",
+    "production:build": "node scripts/production-build.mjs",
+    "production:smoke": "node scripts/production-smoke.mjs",
+    "production:start": "dotnet run --project src/DotFinance.Desktop/DotFinance.Desktop.csproj",
+    "production:architecture": "node scripts/production-architecture.mjs"
   },
   "devDependencies": {
     "likec4": "1.59.4"

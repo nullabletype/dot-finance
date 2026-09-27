@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DotFinance.Domain/DotFinance.Domain.csproj" />
+    <Project Path="src/DotFinance.Application/DotFinance.Application.csproj" />
+    <Project Path="src/DotFinance.Desktop/DotFinance.Desktop.csproj" />
+  </Folder>
+</Solution>

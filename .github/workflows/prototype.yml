@@ -44,14 +44,25 @@ jobs:
             echo 'Unexpected network syscall from persistence scenario'
             exit 1
           fi
+      - name: Production native launch with networking blocked and traced (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo env PATH="$PATH" CI=true DOTNET_EnableDiagnostics=0 unshare --net strace -f -e trace=network -o artifacts/production-network.trace xvfb-run -a node scripts/production-smoke.mjs
+          sudo chmod -R a+rX artifacts/production-launch-* artifacts/production-network.trace
+          if grep -E 'socket\(AF_INET6?,|connect\(.*sa_family=AF_INET' artifacts/production-network.trace; then
+            echo 'Unexpected Internet socket attempt from production launch'
+            exit 1
+          fi
       - name: Native launch (Linux virtual display)
         if: runner.os == 'Linux'
         run: |
+          xvfb-run -a npm run production:smoke
           xvfb-run -a npm run smoke
           xvfb-run -a npm run workflow:smoke
       - name: Native launch (macOS and Windows)
         if: runner.os != 'Linux'
         run: |
+          npm run production:smoke
           npm run smoke
           npm run workflow:smoke
   persistence-macos:

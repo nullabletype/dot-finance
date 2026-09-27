@@ -29,6 +29,7 @@ run('dotnet', ['test', '--project', tests, '--no-restore', '--configuration', 'R
 run('dotnet', ['format', tests, '--verify-no-changes', '--no-restore', '--severity', 'info']);
 rmSync('artifacts/desktop', { recursive: true, force: true });
 run('dotnet', ['publish', project, '--no-build', '--configuration', 'Release', '--output', 'artifacts/desktop']);
+run(process.execPath, ['scripts/production-build.mjs']);
 const endCommit = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' });
 const endStatus = spawnSync('git', ['status', '--porcelain'], { encoding: 'utf8' });
 if (endCommit.status !== 0 || endStatus.status !== 0 || endCommit.stdout !== commit.stdout || endStatus.stdout !== status.stdout) {
