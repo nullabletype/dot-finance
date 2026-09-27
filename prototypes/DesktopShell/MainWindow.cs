@@ -40,6 +40,8 @@ public sealed class MainWindow : Window
     private readonly ContentControl _workspace;
     private readonly ContentControl _transactionDetails;
     private readonly Dictionary<string, TextBox> _balanceBoxes = new(StringComparer.Ordinal);
+    private readonly List<(Control Label, TextBox Input)> _balanceRows = [];
+    private readonly List<(Control Row, Control RightInput)> _ruleInputRows = [];
     private readonly List<Button> _stageButtons = [];
     private readonly List<Control> _pages = [];
     private readonly TextBox _targetBox;
@@ -60,6 +62,8 @@ public sealed class MainWindow : Window
     private Border _filterFrame = null!;
     private StackPanel _filterContent = null!;
     private ScrollViewer _filterScroll = null!;
+    private Expander _balancesExpander = null!;
+    private Expander _rulesExpander = null!;
 
     public WorkflowSession Session { get; } = new();
 
@@ -97,10 +101,10 @@ public sealed class MainWindow : Window
 
         foreach (Account account in Session.Accounts)
         {
-            _balanceBoxes[account.Name] = CompactTextBox(account.CurrentBalance.ToString("0.00", CultureInfo.InvariantCulture), 112);
+            _balanceBoxes[account.Name] = CompactTextBox(account.CurrentBalance.ToString("0.00", CultureInfo.InvariantCulture), 96);
         }
 
-        _targetBox = CompactTextBox(Session.CardPaymentTarget.ToString("0.00", CultureInfo.InvariantCulture), 112);
+        _targetBox = CompactTextBox(Session.CardPaymentTarget.ToString("0.00", CultureInfo.InvariantCulture), 96);
         _themeBox = CompactComboBox(["System", "Light", "Dark"], 104);
         _themeBox.SelectedItem = ThemeSettings.Load();
 
@@ -189,7 +193,7 @@ public sealed class MainWindow : Window
         TextBlock navigationLabel = SectionLabel("RECONCILIATION", new Thickness(10, 0, 0, 10));
         navigationLabel.FontSize = 10;
         content.Children.Add(navigationLabel);
-        AddStage(content, "Import", "upload", "3 fixtures");
+        AddStage(content, "Import", "upload", "5 fixtures");
         AddStage(content, "Review", "review", "transactions");
         AddStage(content, "Transfers", "arrow", "plan");
         AddStage(content, "Confirm", "check", "manual");
@@ -258,10 +262,12 @@ public sealed class MainWindow : Window
     {
         StackPanel page = PageStack();
         page.Children.Add(PageHeader("STEP 1 OF 4", "Import statements", "Bring fictional exports into this local reconciliation.", null));
-        StackPanel fixtureButtons = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
+        WrapPanel fixtureButtons = new() { Orientation = Orientation.Horizontal };
         fixtureButtons.Children.Add(ImportButton("Base card purchases", "synthetic-reconciliation.csv"));
         fixtureButtons.Children.Add(ImportButton("£60 Joint bill", "synthetic-reconciliation-bill.csv"));
         fixtureButtons.Children.Add(ImportButton("Refund example", "synthetic-refund.csv"));
+        fixtureButtons.Children.Add(ImportButton("Non-GBP review", "synthetic-non-gbp.csv"));
+        fixtureButtons.Children.Add(ImportButton("Changed re-import", "synthetic-reconciliation-changed.csv"));
         StackPanel importContent = new() { Spacing = 14 };
         importContent.Children.Add(new TextBlock { Text = "Synthetic fixtures", FontSize = 16, FontWeight = FontWeight.SemiBold });
         importContent.Children.Add(MutedText("Re-importing an existing transaction ID will not create a duplicate."));
@@ -351,7 +357,30 @@ public sealed class MainWindow : Window
             filterHorizontalOverflow = _filterContent.Bounds.Width > _filterFrame.Bounds.Width + 0.5,
             filterScrollMode = _filterScroll.HorizontalScrollBarVisibility.ToString(),
             filterClipsToFrame = _filterFrame.ClipToBounds,
+            balanceLabelsConstrained = _balanceRows.Any(pair => pair.Label is TextBlock label
+                && label.TextLayout.WidthIncludingTrailingWhitespace > label.Bounds.Width + 0.5),
+            minimumBalanceLabelWidth = _balanceRows.Min(pair => pair.Label.Bounds.Width),
+            maximumBalanceLabelDesiredWidth = _balanceRows
+                .Max(pair => pair.Label is TextBlock label ? label.TextLayout.WidthIncludingTrailingWhitespace : pair.Label.DesiredSize.Width),
+            ruleRowsOverflow = _ruleInputRows.Any(pair =>
+                (pair.RightInput.TranslatePoint(default, pair.Row)?.X ?? 0) + pair.RightInput.Bounds.Width > pair.Row.Bounds.Width + 0.5),
+            maximumRuleRowDesiredWidth = _ruleInputRows.Max(pair =>
+                (pair.RightInput.TranslatePoint(default, pair.Row)?.X ?? 0) + pair.RightInput.Bounds.Width),
+            minimumRuleRowWidth = _ruleInputRows.Min(pair => pair.Row.Bounds.Width),
         };
+    }
+
+    internal void ExpandCompactControlsForEvidence()
+    {
+        _balancesExpander.IsExpanded = true;
+        _rulesExpander.IsExpanded = true;
+    }
+
+    internal void ShowCompactBalancesForEvidence() => _balancesExpander.BringIntoView();
+
+    internal void ScrollCompactControlsToEndForEvidence()
+    {
+        _rulesExpander.BringIntoView();
     }
 
     private Border BuildFilterBar()
@@ -419,18 +448,24 @@ public sealed class MainWindow : Window
         apply.HorizontalAlignment = HorizontalAlignment.Stretch;
         apply.Click += (_, _) => ApplyBalancesAndTarget();
         content.Children.Add(apply);
-        return FramedExpander("Balances and card target", content);
+        _balancesExpander = FramedExpander("Balances and card target", content);
+        return _balancesExpander;
     }
 
     private Expander BuildRulesExpander()
     {
         StackPanel content = new() { Spacing = 12, Margin = new Thickness(0, 10, 0, 0) };
         content.Children.Add(SubsectionTitle("Category rule"));
-        ComboBox categoryBox = CompactComboBox(["Groceries", "Dining", "Travel"], 126);
+        ComboBox categoryBox = StretchComboBox(["Groceries", "Dining", "Travel"]);
         categoryBox.SelectedIndex = 0;
-        ComboBox sourceBox = CompactComboBox(["Joint", "Shared Savings", "Personal"], 142);
+        ComboBox sourceBox = StretchComboBox(["Joint", "Shared Savings", "Personal"]);
         sourceBox.SelectedIndex = 2;
-        content.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { categoryBox, sourceBox } });
+        Grid categoryRow = new() { ColumnDefinitions = new ColumnDefinitions("*,8,*") };
+        categoryRow.Children.Add(categoryBox);
+        Grid.SetColumn(sourceBox, 2);
+        categoryRow.Children.Add(sourceBox);
+        _ruleInputRows.Add((categoryRow, sourceBox));
+        content.Children.Add(categoryRow);
         StackPanel ruleButtons = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
         Button preview = ActionButton("Preview", "review");
         preview.Click += (_, _) =>
@@ -453,9 +488,17 @@ public sealed class MainWindow : Window
         content.Children.Add(_previewText);
         content.Children.Add(new Separator { Background = LineBrush });
         content.Children.Add(SubsectionTitle("Allocation override"));
-        ComboBox overrideBox = CompactComboBox(["Joint", "Shared Savings", "Personal"], 142);
+        ComboBox overrideBox = StretchComboBox(["Joint", "Shared Savings", "Personal"]);
         overrideBox.SelectedIndex = 0;
-        content.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { _overrideIdBox, overrideBox } });
+        _overrideIdBox.Width = double.NaN;
+        _overrideIdBox.MinWidth = 0;
+        _overrideIdBox.HorizontalAlignment = HorizontalAlignment.Stretch;
+        Grid overrideRow = new() { ColumnDefinitions = new ColumnDefinitions("*,8,*") };
+        overrideRow.Children.Add(_overrideIdBox);
+        Grid.SetColumn(overrideBox, 2);
+        overrideRow.Children.Add(overrideBox);
+        _ruleInputRows.Add((overrideRow, overrideBox));
+        content.Children.Add(overrideRow);
         StackPanel overrideButtons = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
         Button applyOverride = ActionButton("Apply override", "check", true);
         applyOverride.Click += (_, _) => ApplyOverride(overrideBox, false);
@@ -464,7 +507,8 @@ public sealed class MainWindow : Window
         clearOverride.Click += (_, _) => ApplyOverride(overrideBox, true);
         overrideButtons.Children.Add(clearOverride);
         content.Children.Add(overrideButtons);
-        return FramedExpander("Rules and overrides", content);
+        _rulesExpander = FramedExpander("Rules and overrides", content);
+        return _rulesExpander;
     }
 
     private void ApplyOverride(ComboBox overrideBox, bool clear)
@@ -515,12 +559,14 @@ public sealed class MainWindow : Window
     private Button ImportButton(string label, string file)
     {
         Button button = ActionButton(label, "upload", true);
+        button.Margin = new Thickness(0, 0, 8, 8);
         button.Click += (_, _) =>
         {
             string path = Path.Combine(AppContext.BaseDirectory, "Fixtures", file);
-            (int added, int skipped) = Session.Import(path);
+            ImportResult result = Session.Import(path);
             string queued = Session.PendingTransactionCount > 0 ? $" {Session.PendingTransactionCount} transaction(s) queued for the next reconciliation." : string.Empty;
-            _importStatus.Text = $"Imported {Path.GetFileName(file)}: {added} added, {skipped} duplicate(s) skipped.{queued}";
+            string corrections = result.CorrectionsQueued > 0 ? $" {result.CorrectionsQueued} changed locked/settled transaction(s) require adjustment review." : string.Empty;
+            _importStatus.Text = $"Imported {Path.GetFileName(file)}: {result.Added} added, {result.Updated} updated, {result.Skipped} unchanged duplicate(s) skipped.{queued}{corrections}";
             Refresh();
         };
         return button;
@@ -570,24 +616,36 @@ public sealed class MainWindow : Window
 
     private Grid BalanceRow(Account account)
     {
-        Grid row = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-        row.Children.Add(new TextBlock
+        Grid row = new() { ColumnDefinitions = new ColumnDefinitions("*,8,96") };
+        TextBlock name = new()
         {
-            Text = $"{account.Name}  ·  min {account.ProtectedMinimum.ToString("C0", BritishCulture)}",
-            VerticalAlignment = VerticalAlignment.Center,
+            Text = account.Name,
             FontSize = 14,
+            FontWeight = FontWeight.SemiBold,
+        };
+        StackPanel label = new() { Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
+        label.Children.Add(name);
+        label.Children.Add(new TextBlock
+        {
+            Text = $"Minimum {account.ProtectedMinimum.ToString("C0", BritishCulture)}",
+            Foreground = MutedBrush,
+            FontSize = 11,
         });
-        Grid.SetColumn(_balanceBoxes[account.Name], 1);
+        row.Children.Add(label);
+        Grid.SetColumn(_balanceBoxes[account.Name], 2);
         row.Children.Add(_balanceBoxes[account.Name]);
+        _balanceRows.Add((name, _balanceBoxes[account.Name]));
         return row;
     }
 
     private Grid TargetRow()
     {
-        Grid row = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-        row.Children.Add(new TextBlock { Text = "Card payment target", VerticalAlignment = VerticalAlignment.Center, FontSize = 14 });
-        Grid.SetColumn(_targetBox, 1);
+        Grid row = new() { ColumnDefinitions = new ColumnDefinitions("*,8,96") };
+        TextBlock label = new() { Text = "Card payment target", VerticalAlignment = VerticalAlignment.Center, FontSize = 14 };
+        row.Children.Add(label);
+        Grid.SetColumn(_targetBox, 2);
         row.Children.Add(_targetBox);
+        _balanceRows.Add((label, _targetBox));
         return row;
     }
 
@@ -749,10 +807,11 @@ public sealed class MainWindow : Window
         RefreshAcknowledgements();
         RefreshHistory();
         _targetBox.IsEnabled = Session.Draft?.IsLocked != true;
-        int reviewCount = Session.Allocated.Count(transaction => transaction.RequiresReview);
+        int transactionReviewCount = Session.Allocated.Count(transaction => transaction.RequiresReview);
+        int reviewCount = transactionReviewCount + Session.PendingCorrections.Count;
         _sessionReviewCount.Text = reviewCount == 0 ? "Everything is ready" : $"{reviewCount} item(s) need review";
         _sessionReviewCount.Foreground = reviewCount == 0 ? SuccessBrush : WarningBrush;
-        _reviewProgress.Text = $"{Session.Allocated.Count - reviewCount} of {Session.Allocated.Count} ready";
+        _reviewProgress.Text = $"{Session.Allocated.Count - transactionReviewCount} of {Session.Allocated.Count} ready";
         if (reviewCount == 0)
         {
             _reviewProgress.Foreground = SuccessBrush;
@@ -763,7 +822,7 @@ public sealed class MainWindow : Window
         }
         decimal net = Session.Allocated
             .Where(transaction => transaction.FundingSource is not null || transaction.RequiresReview)
-            .Sum(transaction => -transaction.Amount);
+            .Sum(transaction => -ReconciliationEngine.EffectiveGbpAmount(transaction));
         _netTotal.Text = Pounds(net);
     }
 
@@ -957,7 +1016,7 @@ public sealed class MainWindow : Window
         row.Children.Add(status);
         TextBlock amount = new()
         {
-            Text = SignedPounds(transaction.Amount),
+            Text = DisplayTransactionAmount(transaction),
             FontFamily = MonospaceFont,
             FontSize = 13,
             FontWeight = FontWeight.SemiBold,
@@ -1025,7 +1084,11 @@ public sealed class MainWindow : Window
         heading.Children.Add(title);
         TextBlock amount = new()
         {
-            Text = SignedPounds(selected.Amount),
+            Text = selected.Currency.Equals("GBP", StringComparison.OrdinalIgnoreCase)
+                ? SignedPounds(selected.Amount)
+                : selected.ActualGbpAmount is { } actual
+                    ? $"{SignedPounds(actual)} GBP"
+                    : $"{selected.Amount:0.00} {selected.Currency}",
             FontFamily = MonospaceFont,
             FontSize = 19,
             FontWeight = FontWeight.Bold,
@@ -1046,6 +1109,22 @@ public sealed class MainWindow : Window
         facts.Children.Add(DetailField("SUBCATEGORY", string.IsNullOrWhiteSpace(selected.Subcategory) ? "—" : selected.Subcategory, 1, 1));
         content.Children.Add(facts);
         content.Children.Add(DetailField("IMPORT NOTE", TransactionNote(selected), 0, 0));
+        if (!selected.Currency.Equals("GBP", StringComparison.OrdinalIgnoreCase))
+        {
+            StackPanel conversion = new() { Spacing = 7 };
+            conversion.Children.Add(SubsectionTitle("Actual GBP charged amount"));
+            TextBox actualGbpBox = CompactTextBox(
+                selected.ActualGbpAmount?.ToString("0.00", CultureInfo.InvariantCulture) ?? string.Empty,
+                double.NaN);
+            actualGbpBox.HorizontalAlignment = HorizontalAlignment.Stretch;
+            actualGbpBox.PlaceholderText = "Signed GBP amount";
+            conversion.Children.Add(actualGbpBox);
+            Button recordGbp = ActionButton("Record GBP amount", "check", true);
+            recordGbp.HorizontalAlignment = HorizontalAlignment.Stretch;
+            recordGbp.Click += (_, _) => ApplyActualGbpAmount(selected.Id, actualGbpBox.Text);
+            conversion.Children.Add(recordGbp);
+            content.Children.Add(conversion);
+        }
         StackPanel correction = new() { Spacing = 7 };
         correction.Children.Add(SubsectionTitle("Accept correction"));
         TextBox categoryBox = CompactTextBox(selected.Category, double.NaN);
@@ -1081,9 +1160,62 @@ public sealed class MainWindow : Window
         }
     }
 
+    private void ApplyActualGbpAmount(string transactionId, string? value)
+    {
+        try
+        {
+            if (!decimal.TryParse(value, NumberStyles.Number | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out decimal amount))
+            {
+                throw new ArgumentException("Enter the signed GBP amount actually charged.");
+            }
+
+            Session.SetActualGbpAmount(transactionId, amount);
+            _previewText.Text = $"Recorded the actual GBP amount for {transactionId}.";
+            Refresh();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+        {
+            _previewText.Text = exception.Message;
+        }
+    }
+
     private void RefreshSidebar()
     {
         _sidebar.Children.Clear();
+        if (Session.PendingCorrections.Count > 0)
+        {
+            _sidebar.Children.Add(new TextBlock
+            {
+                Text = $"{Session.PendingCorrections.Count} changed locked/settled transaction(s) await explicit adjustment review.",
+                Foreground = WarningBrush,
+                FontWeight = FontWeight.SemiBold,
+                TextWrapping = TextWrapping.Wrap,
+            });
+            foreach (PendingTransactionCorrection correction in Session.PendingCorrections)
+            {
+                Grid row = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+                row.Children.Add(MutedText(CorrectionSummary(correction)));
+                Button accept = ActionButton(Session.Draft?.IsLocked == true ? "Next draft" : "Apply adjustment", "check");
+                accept.IsEnabled = Session.Draft?.IsLocked != true;
+                accept.Click += (_, _) =>
+                {
+                    try
+                    {
+                        Session.AcceptPendingCorrection(correction.Original.Id);
+                        _previewText.Text = $"Accepted {correction.Original.Id} as a reversal and replacement adjustment.";
+                        Refresh();
+                    }
+                    catch (InvalidOperationException exception)
+                    {
+                        _previewText.Text = exception.Message;
+                    }
+                };
+                Grid.SetColumn(accept, 1);
+                row.Children.Add(accept);
+                _sidebar.Children.Add(row);
+            }
+            _sidebar.Children.Add(new Separator { Background = LineBrush });
+        }
         foreach (FundingSource source in new[] { FundingSource.Joint, FundingSource.SharedSavings, FundingSource.Personal })
         {
             List<Transaction> matches = [.. Session.Allocated.Where(transaction => transaction.FundingSource == source)];
@@ -1091,10 +1223,10 @@ public sealed class MainWindow : Window
             {
                 continue;
             }
-            _sidebar.Children.Add(SummaryRow(SourceLabel(source), Pounds(matches.Sum(transaction => -transaction.Amount)), true));
+            _sidebar.Children.Add(SummaryRow(SourceLabel(source), Pounds(matches.Sum(transaction => -ReconciliationEngine.EffectiveGbpAmount(transaction))), true));
             foreach (IGrouping<string, Transaction> category in matches.GroupBy(transaction => transaction.Category).OrderBy(group => group.Key, StringComparer.Ordinal))
             {
-                _sidebar.Children.Add(SummaryRow(category.Key, Pounds(category.Sum(transaction => -transaction.Amount)), false));
+                _sidebar.Children.Add(SummaryRow(category.Key, Pounds(category.Sum(transaction => -ReconciliationEngine.EffectiveGbpAmount(transaction))), false));
             }
         }
         foreach (ReportingSubtotal subtotal in Session.Plan.ReportingSubtotals)
@@ -1104,7 +1236,15 @@ public sealed class MainWindow : Window
         List<Transaction> review = [.. Session.Allocated.Where(transaction => transaction.RequiresReview)];
         if (review.Count > 0)
         {
-            _sidebar.Children.Add(SummaryRow($"Requires review · {review.Count}", Pounds(review.Sum(transaction => -transaction.Amount)), true));
+            bool awaitsGbp = review.Any(transaction => !transaction.Currency.Equals("GBP", StringComparison.OrdinalIgnoreCase)
+                && !transaction.ActualGbpAmount.HasValue);
+            decimal knownGbp = review.Where(transaction => transaction.Currency.Equals("GBP", StringComparison.OrdinalIgnoreCase)
+                    || transaction.ActualGbpAmount.HasValue)
+                .Sum(transaction => -ReconciliationEngine.EffectiveGbpAmount(transaction));
+            _sidebar.Children.Add(SummaryRow(
+                $"Requires review · {review.Count}",
+                awaitsGbp ? "GBP pending" : Pounds(knownGbp),
+                true));
         }
         if (_sidebar.Children.Count == 0)
         {
@@ -1195,7 +1335,10 @@ public sealed class MainWindow : Window
                         && account.Role is AccountRole.PrimaryPersonal or AccountRole.PersonalSavings));
             bool discrepancyBlocked = !transfer.Acknowledged
                 && draft is { Discrepancy: not 0m, DiscrepancyAcknowledged: false };
-            bool actionBlocked = blocked || discrepancyBlocked;
+            bool reviewBlocked = !transfer.Acknowledged
+                && (Session.Allocated.Any(transaction => transaction.RequiresReview)
+                    || draft?.IsLocked != true && Session.PendingCorrections.Count > 0);
+            bool actionBlocked = blocked || discrepancyBlocked || reviewBlocked;
             Button button = ActionButton(transfer.Acknowledged ? "Undo" : actionBlocked ? "Blocked" : "Acknowledge", transfer.Acknowledged ? "history" : "check", !transfer.Acknowledged && !actionBlocked);
             button.IsEnabled = transfer.Acknowledged || !actionBlocked;
             button.Click += (_, _) =>
@@ -1221,6 +1364,8 @@ public sealed class MainWindow : Window
         }
         bool canPay = allAcknowledged
             && Session.Plan.Shortfalls.Count == 0
+            && !Session.Allocated.Any(transaction => transaction.RequiresReview)
+            && (draft?.IsLocked == true || Session.PendingCorrections.Count == 0)
             && draft?.IsSettled != true
             && draft is not { Discrepancy: not 0m, DiscrepancyAcknowledged: false };
         Button pay = ActionButton(draft?.IsSettled == true ? "Card paid" : "Confirm card paid", "card", true);
@@ -1250,6 +1395,35 @@ public sealed class MainWindow : Window
             foreach (Transfer transfer in reconciliation.Transfers)
             {
                 item.Children.Add(MutedText($"{transfer.Source} · {transfer.Kind} · {Pounds(transfer.Amount)}"));
+            }
+            foreach (Transaction transaction in reconciliation.Transactions)
+            {
+                item.Children.Add(MutedText($"{transaction.Date:dd MMM yyyy} · {TransactionName(transaction)} · {DisplayTransactionAmount(transaction)} · {SourceLabel(transaction.FundingSource)}"));
+            }
+            if (index == Session.CompletedReconciliations.Count - 1)
+            {
+                item.Children.Add(new TextBlock
+                {
+                    Text = "Reopening changes this local record; it does not reverse external transfers or card payments.",
+                    Foreground = WarningBrush,
+                    TextWrapping = TextWrapping.Wrap,
+                });
+                Button reopen = ActionButton("Reopen latest record", "history");
+                reopen.IsEnabled = Session.CanReopenLatestCompleted;
+                reopen.Click += (_, _) =>
+                {
+                    try
+                    {
+                        Session.ReopenLatestCompleted();
+                        _persistenceStatus.Text = "Reopened the latest completion. This changes the record only; it does not reverse external transfers or card payments.";
+                        Refresh();
+                    }
+                    catch (InvalidOperationException exception)
+                    {
+                        _persistenceStatus.Text = exception.Message;
+                    }
+                };
+                item.Children.Add(reopen);
             }
             _historyPanel.Children.Add(Card(item, new Thickness(14)));
         }
@@ -1363,6 +1537,14 @@ public sealed class MainWindow : Window
         HorizontalContentAlignment = HorizontalAlignment.Left,
     };
 
+    private static ComboBox StretchComboBox(IEnumerable<string> items)
+    {
+        ComboBox comboBox = CompactComboBox(items, double.NaN);
+        comboBox.MinWidth = 0;
+        comboBox.HorizontalAlignment = HorizontalAlignment.Stretch;
+        return comboBox;
+    }
+
     private static Grid LedgerGrid() => new()
     {
         ColumnDefinitions = new ColumnDefinitions("76,*,135,130,96,108"),
@@ -1439,7 +1621,7 @@ public sealed class MainWindow : Window
         };
     }
 
-    private static Control DetailField(string label, string value, int column, int row)
+    private static StackPanel DetailField(string label, string value, int column, int row)
     {
         StackPanel field = new() { Spacing = 4, Margin = new Thickness(0, 0, 6, 12) };
         field.Children.Add(new TextBlock { Text = label, Foreground = MutedBrush, FontSize = 10, FontWeight = FontWeight.Bold, LetterSpacing = 1 });
@@ -1478,7 +1660,7 @@ public sealed class MainWindow : Window
         return row;
     }
 
-    private static Control CreateIcon(string name, IBrush? foreground = null, double size = 16)
+    private static Viewbox CreateIcon(string name, IBrush? foreground = null, double size = 16)
     {
         string data = name switch
         {
@@ -1521,7 +1703,7 @@ public sealed class MainWindow : Window
         };
     }
 
-    private static Control CreateBrandMark(double size)
+    private static Viewbox CreateBrandMark(double size)
     {
         Canvas canvas = new() { Width = 32, Height = 32 };
         canvas.Children.Add(new Avalonia.Controls.Shapes.Path
@@ -1584,6 +1766,42 @@ public sealed class MainWindow : Window
 
     private static string TransactionStatus(Transaction transaction) =>
         transaction.RequiresReview ? "Review" : transaction.FundingSource is null ? "Excluded" : "Ready";
+
+    private static string DisplayTransactionAmount(Transaction transaction) =>
+        transaction.Currency.Equals("GBP", StringComparison.OrdinalIgnoreCase)
+            ? SignedPounds(transaction.Amount)
+            : transaction.ActualGbpAmount is { } actual
+                ? $"{SignedPounds(actual)} GBP"
+                : $"{transaction.Amount:0.00} {transaction.Currency}";
+
+    private static string CorrectionSummary(PendingTransactionCorrection correction)
+    {
+        List<string> changes = [];
+        AddChange(changes, "amount", DisplayTransactionAmount(correction.Original), DisplayTransactionAmount(correction.Updated));
+        AddChange(changes, "date", correction.Original.Date.ToString("dd MMM yyyy", BritishCulture), correction.Updated.Date.ToString("dd MMM yyyy", BritishCulture));
+        AddChange(changes, "account", correction.Original.Account, correction.Updated.Account);
+        AddChange(changes, "bank", correction.Original.Bank, correction.Updated.Bank);
+        AddChange(changes, "currency", correction.Original.Currency, correction.Updated.Currency);
+        AddChange(changes, "category", correction.Original.Category, correction.Updated.Category);
+        AddChange(changes, "subcategory", correction.Original.Subcategory, correction.Updated.Subcategory);
+        AddChange(changes, "type", correction.Original.Type, correction.Updated.Type);
+        AddChange(changes, "tags", correction.Original.Tags, correction.Updated.Tags);
+        AddChange(changes, "counterparty", correction.Original.Counterparty, correction.Updated.Counterparty);
+        AddChange(changes, "custom name", correction.Original.CustomName, correction.Updated.CustomName);
+        AddChange(changes, "merchant", correction.Original.Merchant, correction.Updated.Merchant);
+        AddChange(changes, "details", correction.Original.AdditionalDetails, correction.Updated.AdditionalDetails);
+        AddChange(changes, "notes", correction.Original.Notes, correction.Updated.Notes);
+        AddChange(changes, "linked transaction", correction.Original.LinkedTransactionId, correction.Updated.LinkedTransactionId);
+        return $"{correction.Original.Id} · {string.Join("; ", changes)}";
+    }
+
+    private static void AddChange(List<string> changes, string field, string original, string updated)
+    {
+        if (!string.Equals(original, updated, StringComparison.Ordinal))
+        {
+            changes.Add($"{field}: {original} → {updated}");
+        }
+    }
 
     private static string DescribePreview(TransferPlan plan, FundingSource source)
     {
