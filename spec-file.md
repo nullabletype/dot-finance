@@ -8,6 +8,10 @@ Use C# and .NET 10. Support macOS, Linux, and Windows, with macOS as the primary
 
 Absolutely no internet calls: no financial-institution connections, payment initiation, telemetry, exchange-rate lookups, cloud-storage integration, or other external services.
 
+## Application distribution
+
+Ship a single native application executable per supported platform/CPU target, without separately distributed application DLLs or native-library sidecars and without requiring a separate .NET installation. Separate source projects are permitted for organisation and boundary enforcement. Remove unused code through trimming/tree shaking where safely supported and verified against the published application. Verify the native dependency strategy early; any runtime-extraction fallback or macOS bundle accommodation requires an explicit decision rather than silently weakening the single-executable requirement.
+
 ## Accounts and allocation rules
 
 Distinguish the account a purchase was paid from from the funding source responsible for it. Accounts, categories, funding rules, protected minimum balances, and personal funding priority are configurable in the app.
