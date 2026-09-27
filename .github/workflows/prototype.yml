@@ -27,6 +27,7 @@ permissions:
 jobs:
   core:
     name: Deterministic build and Linux validation
+    if: ${{ github.event.action != 'labeled' || github.event.label.name == 'in-review' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     outputs:
@@ -37,33 +38,6 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
-      - name: Select validation scope
-        id: scope
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          REVIEW_READY: ${{ contains(github.event.pull_request.labels.*.name, 'in-review') }}
-          RUN_NATIVE: ${{ inputs.run_native }}
-          RUN_PERSISTENCE: ${{ inputs.run_persistence }}
-        run: |
-          full_validation=false
-          persistence_validation=false
-
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            full_validation="$RUN_NATIVE"
-            persistence_validation="$RUN_PERSISTENCE"
-          elif [[ "$EVENT_NAME" == "pull_request" && "$REVIEW_READY" == "true" ]]; then
-            full_validation=true
-            changed_paths="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
-            if grep -Eq '^(\.github/workflows/prototype\.yml|global\.json|Directory\.Build\.props|DotFinance\.slnx|package(-lock)?\.json|build/DesktopDependencies\.props|scripts/(build|persistence-smoke|production-build|production-smoke|production-vault-smoke)\.mjs|prototypes/DesktopShell/|prototypes/DesktopShell\.Tests/|src/DotFinance\.Storage/|tests/DotFinance\.Storage\.Tests/|src/[^/]+/([^/]+\.csproj|packages\.lock\.json)|src/.*(Backup|Infrastructure|Persistence|Storage|Vault))' <<< "$changed_paths"; then
-              persistence_validation=true
-            fi
-          fi
-
-          echo "full_validation=$full_validation" >> "$GITHUB_OUTPUT"
-          echo "persistence_validation=$persistence_validation" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
@@ -71,6 +45,16 @@ jobs:
         with:
           node-version: '24.21.0'
           cache: npm
+      - name: Select validation scope
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          REVIEW_READY: ${{ contains(github.event.pull_request.labels.*.name, 'in-review') }}
+          RUN_NATIVE: ${{ inputs.run_native }}
+          RUN_PERSISTENCE: ${{ inputs.run_persistence }}
+        run: node scripts/validation-scope.mjs >> "$GITHUB_OUTPUT"
       - run: npm ci
       - name: Controller interruption and recovery trial
         run: npm run controller:trial
