@@ -189,7 +189,7 @@ public sealed class MainWindow : Window
         TextBlock navigationLabel = SectionLabel("RECONCILIATION", new Thickness(10, 0, 0, 10));
         navigationLabel.FontSize = 10;
         content.Children.Add(navigationLabel);
-        AddStage(content, "Import", "upload", "4 fixtures");
+        AddStage(content, "Import", "upload", "5 fixtures");
         AddStage(content, "Review", "review", "transactions");
         AddStage(content, "Transfers", "arrow", "plan");
         AddStage(content, "Confirm", "check", "manual");
@@ -258,11 +258,12 @@ public sealed class MainWindow : Window
     {
         StackPanel page = PageStack();
         page.Children.Add(PageHeader("STEP 1 OF 4", "Import statements", "Bring fictional exports into this local reconciliation.", null));
-        StackPanel fixtureButtons = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
+        WrapPanel fixtureButtons = new() { Orientation = Orientation.Horizontal };
         fixtureButtons.Children.Add(ImportButton("Base card purchases", "synthetic-reconciliation.csv"));
         fixtureButtons.Children.Add(ImportButton("£60 Joint bill", "synthetic-reconciliation-bill.csv"));
         fixtureButtons.Children.Add(ImportButton("Refund example", "synthetic-refund.csv"));
         fixtureButtons.Children.Add(ImportButton("Non-GBP review", "synthetic-non-gbp.csv"));
+        fixtureButtons.Children.Add(ImportButton("Changed re-import", "synthetic-reconciliation-changed.csv"));
         StackPanel importContent = new() { Spacing = 14 };
         importContent.Children.Add(new TextBlock { Text = "Synthetic fixtures", FontSize = 16, FontWeight = FontWeight.SemiBold });
         importContent.Children.Add(MutedText("Re-importing an existing transaction ID will not create a duplicate."));
@@ -516,6 +517,7 @@ public sealed class MainWindow : Window
     private Button ImportButton(string label, string file)
     {
         Button button = ActionButton(label, "upload", true);
+        button.Margin = new Thickness(0, 0, 8, 8);
         button.Click += (_, _) =>
         {
             string path = Path.Combine(AppContext.BaseDirectory, "Fixtures", file);
@@ -960,7 +962,7 @@ public sealed class MainWindow : Window
         row.Children.Add(status);
         TextBlock amount = new()
         {
-            Text = SignedPounds(transaction.Amount),
+            Text = DisplayTransactionAmount(transaction),
             FontFamily = MonospaceFont,
             FontSize = 13,
             FontWeight = FontWeight.SemiBold,
@@ -1138,7 +1140,7 @@ public sealed class MainWindow : Window
             foreach (PendingTransactionCorrection correction in Session.PendingCorrections)
             {
                 Grid row = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-                row.Children.Add(MutedText($"{correction.Original.Id} · {correction.Original.Amount:0.00} → {correction.Updated.Amount:0.00}"));
+                row.Children.Add(MutedText(CorrectionSummary(correction)));
                 Button accept = ActionButton(Session.Draft?.IsLocked == true ? "Next draft" : "Apply adjustment", "check");
                 accept.IsEnabled = Session.Draft?.IsLocked != true;
                 accept.Click += (_, _) =>
@@ -1167,10 +1169,10 @@ public sealed class MainWindow : Window
             {
                 continue;
             }
-            _sidebar.Children.Add(SummaryRow(SourceLabel(source), Pounds(matches.Sum(transaction => -transaction.Amount)), true));
+            _sidebar.Children.Add(SummaryRow(SourceLabel(source), Pounds(matches.Sum(transaction => -ReconciliationEngine.EffectiveGbpAmount(transaction))), true));
             foreach (IGrouping<string, Transaction> category in matches.GroupBy(transaction => transaction.Category).OrderBy(group => group.Key, StringComparer.Ordinal))
             {
-                _sidebar.Children.Add(SummaryRow(category.Key, Pounds(category.Sum(transaction => -transaction.Amount)), false));
+                _sidebar.Children.Add(SummaryRow(category.Key, Pounds(category.Sum(transaction => -ReconciliationEngine.EffectiveGbpAmount(transaction))), false));
             }
         }
         foreach (ReportingSubtotal subtotal in Session.Plan.ReportingSubtotals)
@@ -1180,7 +1182,15 @@ public sealed class MainWindow : Window
         List<Transaction> review = [.. Session.Allocated.Where(transaction => transaction.RequiresReview)];
         if (review.Count > 0)
         {
-            _sidebar.Children.Add(SummaryRow($"Requires review · {review.Count}", Pounds(review.Sum(transaction => -transaction.Amount)), true));
+            bool awaitsGbp = review.Any(transaction => !transaction.Currency.Equals("GBP", StringComparison.OrdinalIgnoreCase)
+                && !transaction.ActualGbpAmount.HasValue);
+            decimal knownGbp = review.Where(transaction => transaction.Currency.Equals("GBP", StringComparison.OrdinalIgnoreCase)
+                    || transaction.ActualGbpAmount.HasValue)
+                .Sum(transaction => -ReconciliationEngine.EffectiveGbpAmount(transaction));
+            _sidebar.Children.Add(SummaryRow(
+                $"Requires review · {review.Count}",
+                awaitsGbp ? "GBP pending" : Pounds(knownGbp),
+                true));
         }
         if (_sidebar.Children.Count == 0)
         {
@@ -1301,7 +1311,7 @@ public sealed class MainWindow : Window
         bool canPay = allAcknowledged
             && Session.Plan.Shortfalls.Count == 0
             && !Session.Allocated.Any(transaction => transaction.RequiresReview)
-            && Session.PendingCorrections.Count == 0
+            && (draft?.IsLocked == true || Session.PendingCorrections.Count == 0)
             && draft?.IsSettled != true
             && draft is not { Discrepancy: not 0m, DiscrepancyAcknowledged: false };
         Button pay = ActionButton(draft?.IsSettled == true ? "Card paid" : "Confirm card paid", "card", true);
@@ -1332,9 +1342,20 @@ public sealed class MainWindow : Window
             {
                 item.Children.Add(MutedText($"{transfer.Source} · {transfer.Kind} · {Pounds(transfer.Amount)}"));
             }
+            foreach (Transaction transaction in reconciliation.Transactions)
+            {
+                item.Children.Add(MutedText($"{transaction.Date:dd MMM yyyy} · {TransactionName(transaction)} · {DisplayTransactionAmount(transaction)} · {SourceLabel(transaction.FundingSource)}"));
+            }
             if (index == Session.CompletedReconciliations.Count - 1)
             {
+                item.Children.Add(new TextBlock
+                {
+                    Text = "Reopening changes this local record; it does not reverse external transfers or card payments.",
+                    Foreground = WarningBrush,
+                    TextWrapping = TextWrapping.Wrap,
+                });
                 Button reopen = ActionButton("Reopen latest record", "history");
+                reopen.IsEnabled = Session.CanReopenLatestCompleted;
                 reopen.Click += (_, _) =>
                 {
                     try
@@ -1538,7 +1559,7 @@ public sealed class MainWindow : Window
         };
     }
 
-    private static Control DetailField(string label, string value, int column, int row)
+    private static StackPanel DetailField(string label, string value, int column, int row)
     {
         StackPanel field = new() { Spacing = 4, Margin = new Thickness(0, 0, 6, 12) };
         field.Children.Add(new TextBlock { Text = label, Foreground = MutedBrush, FontSize = 10, FontWeight = FontWeight.Bold, LetterSpacing = 1 });
@@ -1577,7 +1598,7 @@ public sealed class MainWindow : Window
         return row;
     }
 
-    private static Control CreateIcon(string name, IBrush? foreground = null, double size = 16)
+    private static Viewbox CreateIcon(string name, IBrush? foreground = null, double size = 16)
     {
         string data = name switch
         {
@@ -1620,7 +1641,7 @@ public sealed class MainWindow : Window
         };
     }
 
-    private static Control CreateBrandMark(double size)
+    private static Viewbox CreateBrandMark(double size)
     {
         Canvas canvas = new() { Width = 32, Height = 32 };
         canvas.Children.Add(new Avalonia.Controls.Shapes.Path
@@ -1683,6 +1704,42 @@ public sealed class MainWindow : Window
 
     private static string TransactionStatus(Transaction transaction) =>
         transaction.RequiresReview ? "Review" : transaction.FundingSource is null ? "Excluded" : "Ready";
+
+    private static string DisplayTransactionAmount(Transaction transaction) =>
+        transaction.Currency.Equals("GBP", StringComparison.OrdinalIgnoreCase)
+            ? SignedPounds(transaction.Amount)
+            : transaction.ActualGbpAmount is { } actual
+                ? $"{SignedPounds(actual)} GBP"
+                : $"{transaction.Amount:0.00} {transaction.Currency}";
+
+    private static string CorrectionSummary(PendingTransactionCorrection correction)
+    {
+        List<string> changes = [];
+        AddChange(changes, "amount", DisplayTransactionAmount(correction.Original), DisplayTransactionAmount(correction.Updated));
+        AddChange(changes, "date", correction.Original.Date.ToString("dd MMM yyyy", BritishCulture), correction.Updated.Date.ToString("dd MMM yyyy", BritishCulture));
+        AddChange(changes, "account", correction.Original.Account, correction.Updated.Account);
+        AddChange(changes, "bank", correction.Original.Bank, correction.Updated.Bank);
+        AddChange(changes, "currency", correction.Original.Currency, correction.Updated.Currency);
+        AddChange(changes, "category", correction.Original.Category, correction.Updated.Category);
+        AddChange(changes, "subcategory", correction.Original.Subcategory, correction.Updated.Subcategory);
+        AddChange(changes, "type", correction.Original.Type, correction.Updated.Type);
+        AddChange(changes, "tags", correction.Original.Tags, correction.Updated.Tags);
+        AddChange(changes, "counterparty", correction.Original.Counterparty, correction.Updated.Counterparty);
+        AddChange(changes, "custom name", correction.Original.CustomName, correction.Updated.CustomName);
+        AddChange(changes, "merchant", correction.Original.Merchant, correction.Updated.Merchant);
+        AddChange(changes, "details", correction.Original.AdditionalDetails, correction.Updated.AdditionalDetails);
+        AddChange(changes, "notes", correction.Original.Notes, correction.Updated.Notes);
+        AddChange(changes, "linked transaction", correction.Original.LinkedTransactionId, correction.Updated.LinkedTransactionId);
+        return $"{correction.Original.Id} · {string.Join("; ", changes)}";
+    }
+
+    private static void AddChange(List<string> changes, string field, string original, string updated)
+    {
+        if (!string.Equals(original, updated, StringComparison.Ordinal))
+        {
+            changes.Add($"{field}: {original} → {updated}");
+        }
+    }
 
     private static string DescribePreview(TransferPlan plan, FundingSource source)
     {

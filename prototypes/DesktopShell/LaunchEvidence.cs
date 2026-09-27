@@ -144,7 +144,7 @@ internal static class LaunchEvidence
 
         WorkflowSession duplicate = new();
         duplicate.Import(Path.Combine(fixtureDirectory, "synthetic-reconciliation.csv"));
-        (int Added, int Skipped) = duplicate.Import(Path.Combine(fixtureDirectory, "synthetic-reconciliation.csv"));
+        (int added, int skipped) = duplicate.Import(Path.Combine(fixtureDirectory, "synthetic-reconciliation.csv"));
 
         WorkflowSession reviewBlock = new();
         reviewBlock.Import(Path.Combine(fixtureDirectory, "synthetic-reconciliation.csv"));
@@ -175,6 +175,25 @@ internal static class LaunchEvidence
         AcknowledgeOutstandingFunding(correction);
         correction.AcknowledgeCardPaid();
         correction.AcceptPendingCorrection("R-0001");
+        ImportResult acceptedCorrectionReplay = correction.Import(Path.Combine(fixtureDirectory, "synthetic-reconciliation-changed.csv"));
+
+        WorkflowSession reopenGuard = new();
+        reopenGuard.Import(Path.Combine(fixtureDirectory, "synthetic-reconciliation.csv"));
+        reopenGuard.SetOverride("R-0005", FundingSource.Joint);
+        reopenGuard.AcknowledgeDiscrepancy();
+        AcknowledgeOutstandingFunding(reopenGuard);
+        reopenGuard.AcknowledgeCardPaid();
+        reopenGuard.SetCardPaymentTarget(900m);
+        bool changedTargetBlocksReopen;
+        try
+        {
+            reopenGuard.ReopenLatestCompleted();
+            changedTargetBlocksReopen = false;
+        }
+        catch (InvalidOperationException)
+        {
+            changedTargetBlocksReopen = true;
+        }
 
         return new
         {
@@ -186,7 +205,7 @@ internal static class LaunchEvidence
             jointBill = WorkflowSnapshot(bill),
             refund = WorkflowSnapshot(refund),
             insufficientFunds = WorkflowSnapshot(shortfall),
-            duplicateImport = new { Added, Skipped, transactionCount = duplicate.Allocated.Count },
+            duplicateImport = new { added, skipped, transactionCount = duplicate.Allocated.Count },
             reviewBlock = new { blocked = unresolvedReviewBlocked, locked = reviewBlock.Draft?.IsLocked },
             nonGbp = new
             {
@@ -203,7 +222,9 @@ internal static class LaunchEvidence
                 jointAdjustment = Contribution(correction.Plan, FundingSource.Joint),
                 preservedOriginalAmount = correction.CompletedReconciliations.Single().Transactions
                     .Single(transaction => transaction.Id == "R-0001").Amount,
+                acceptedReplaySkipped = acceptedCorrectionReplay.Skipped,
             },
+            reopenGuard = new { changedTargetBlocksReopen },
             compactLayout,
             expected = new
             {
@@ -215,7 +236,8 @@ internal static class LaunchEvidence
                 duplicateImport = new { added = 0, skipped = 6 },
                 reviewBlock = new { blocked = true, locked = false },
                 nonGbp = new { actualGbpAmount = -275m, jointContribution = 275m },
-                correction = new { queued = 1, remaining = 0, adjustmentTransactions = 2, jointAdjustment = 20m, preservedOriginalAmount = -300m },
+                correction = new { queued = 1, remaining = 0, adjustmentTransactions = 2, jointAdjustment = 20m, preservedOriginalAmount = -300m, acceptedReplaySkipped = 1 },
+                reopenGuard = new { changedTargetBlocksReopen = true },
             },
             scope = "Synthetic guided-reconciliation workflow evidence; not production acceptance."
         };

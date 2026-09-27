@@ -12,7 +12,9 @@ public sealed class WorkflowSession
     private readonly List<Transaction> _pending = [];
     private readonly List<ReconciliationDraft> _completed = [];
     private readonly List<PendingTransactionCorrection> _pendingCorrections = [];
+    private readonly Dictionary<string, Transaction> _acceptedCorrectionBaselines = new(StringComparer.Ordinal);
     private readonly Dictionary<string, FundingSource> _overrides = new(StringComparer.Ordinal);
+    private bool _hasNewerReconciliationActivity;
 
     public WorkflowSession()
     {
@@ -60,6 +62,10 @@ public sealed class WorkflowSession
 
     public ReconciliationDraft? Draft { get; private set; }
 
+    public bool CanReopenLatestCompleted => _completed.Count > 0
+        && !_hasNewerReconciliationActivity
+        && Draft?.IsLocked != true;
+
     /// <summary>Imports new transactions, updates editable matches, and queues locked or settled corrections.</summary>
     public ImportResult Import(string path)
     {
@@ -80,7 +86,9 @@ public sealed class WorkflowSession
                 }
                 else if (Draft?.IsLocked == true)
                 {
-                    if (QueueCorrection(current, transaction))
+                    Transaction locked = Draft.Transactions.First(candidate =>
+                        string.Equals(candidate.Id, transaction.Id, StringComparison.Ordinal));
+                    if (QueueCorrection(locked, transaction))
                     {
                         correctionsQueued++;
                     }
@@ -109,6 +117,50 @@ public sealed class WorkflowSession
                 {
                     _pending[pendingIndex] = transaction;
                     updated++;
+                }
+
+                continue;
+            }
+
+            if (_acceptedCorrectionBaselines.TryGetValue(transaction.Id, out Transaction? accepted))
+            {
+                if (SameImportedFields(accepted, transaction))
+                {
+                    skipped++;
+                }
+                else
+                {
+                    int replacementIndex = _imported.FindIndex(candidate =>
+                        string.Equals(candidate.LinkedTransactionId, transaction.Id, StringComparison.Ordinal)
+                        && string.Equals(candidate.Type, "Correction replacement", StringComparison.Ordinal));
+                    if (replacementIndex >= 0 && Draft?.IsLocked != true)
+                    {
+                        Transaction replacement = _imported[replacementIndex];
+                        bool actualGbpNeedsReview = !transaction.Currency.Equals("GBP", StringComparison.OrdinalIgnoreCase)
+                            && (transaction.Amount != accepted.Amount
+                                || !transaction.Currency.Equals(accepted.Currency, StringComparison.OrdinalIgnoreCase));
+                        _imported[replacementIndex] = transaction with
+                        {
+                            Id = replacement.Id,
+                            Type = replacement.Type,
+                            LinkedTransactionId = transaction.Id,
+                            ActualGbpAmount = actualGbpNeedsReview ? null : replacement.ActualGbpAmount,
+                        };
+                        _acceptedCorrectionBaselines[transaction.Id] = transaction with
+                        {
+                            FundingSource = accepted.FundingSource,
+                            ActualGbpAmount = actualGbpNeedsReview ? null : replacement.ActualGbpAmount,
+                        };
+                        updated++;
+                    }
+                    else if (QueueCorrection(accepted, transaction))
+                    {
+                        correctionsQueued++;
+                    }
+                    else
+                    {
+                        skipped++;
+                    }
                 }
 
                 continue;
@@ -152,6 +204,11 @@ public sealed class WorkflowSession
             added++;
         }
 
+        if (added > 0 || updated > 0 || correctionsQueued > 0)
+        {
+            MarkNewerReconciliationActivity();
+        }
+
         Recompute();
         return new ImportResult(added, skipped, updated, correctionsQueued);
     }
@@ -171,6 +228,7 @@ public sealed class WorkflowSession
             Category = category.Trim(),
             Subcategory = subcategory.Trim(),
         };
+        MarkNewerReconciliationActivity();
         Recompute();
     }
 
@@ -190,6 +248,14 @@ public sealed class WorkflowSession
         }
 
         _imported[index] = _imported[index] with { ActualGbpAmount = actualGbpAmount };
+        Transaction updated = _imported[index];
+        if (string.Equals(updated.Type, "Correction replacement", StringComparison.Ordinal)
+            && _acceptedCorrectionBaselines.TryGetValue(updated.LinkedTransactionId, out Transaction? baseline))
+        {
+            _acceptedCorrectionBaselines[updated.LinkedTransactionId] = baseline with { ActualGbpAmount = actualGbpAmount };
+        }
+
+        MarkNewerReconciliationActivity();
         Recompute();
     }
 
@@ -205,12 +271,9 @@ public sealed class WorkflowSession
         }
 
         PendingTransactionCorrection correction = _pendingCorrections[index];
-        string reversalId = $"adjustment:{transactionId}:reversal";
-        string replacementId = $"adjustment:{transactionId}:replacement";
-        if (_imported.Any(transaction => transaction.Id == reversalId || transaction.Id == replacementId))
-        {
-            throw new InvalidOperationException($"Transaction {transactionId} already has an adjustment in this draft.");
-        }
+        int sequence = NextCorrectionSequence(transactionId);
+        string reversalId = $"adjustment:{transactionId}:{sequence}:reversal";
+        string replacementId = $"adjustment:{transactionId}:{sequence}:replacement";
 
         Transaction reversal = correction.Original with
         {
@@ -241,6 +304,13 @@ public sealed class WorkflowSession
 
         _pendingCorrections.RemoveAt(index);
         Recompute();
+        Transaction allocatedReplacement = Allocated.Single(transaction => transaction.Id == replacementId);
+        _acceptedCorrectionBaselines[transactionId] = correction.Updated with
+        {
+            FundingSource = allocatedReplacement.FundingSource,
+            ActualGbpAmount = allocatedReplacement.ActualGbpAmount,
+        };
+        MarkNewerReconciliationActivity();
     }
 
     /// <summary>Sets the current balance of the named account and recomputes.</summary>
@@ -250,6 +320,7 @@ public sealed class WorkflowSession
             .Select(account => string.Equals(account.Name, accountName, StringComparison.Ordinal)
                 ? account with { CurrentBalance = balance }
                 : account)];
+        MarkNewerReconciliationActivity();
         Recompute();
     }
 
@@ -262,6 +333,7 @@ public sealed class WorkflowSession
         }
 
         CardPaymentTarget = target;
+        MarkNewerReconciliationActivity();
         Recompute();
     }
 
@@ -283,6 +355,7 @@ public sealed class WorkflowSession
             _overrides.Remove(transactionId);
         }
 
+        MarkNewerReconciliationActivity();
         Recompute();
     }
 
@@ -296,6 +369,7 @@ public sealed class WorkflowSession
                 .Where(rule => !string.Equals(rule.Category, category, StringComparison.OrdinalIgnoreCase)),
             new CategoryRule(category, source),
         ];
+        MarkNewerReconciliationActivity();
         Recompute();
     }
 
@@ -351,6 +425,7 @@ public sealed class WorkflowSession
             IsSettled: false,
             discrepancy,
             discrepancyAcknowledged);
+        RefreshAcceptedCorrectionBaselines();
     }
 
     public void AcknowledgeDiscrepancy()
@@ -361,6 +436,7 @@ public sealed class WorkflowSession
         }
 
         Draft = ReconciliationEngine.AcknowledgeDiscrepancy(Draft);
+        MarkNewerReconciliationActivity();
     }
 
     public void AcknowledgeTransfer(string source, TransferKind kind)
@@ -384,6 +460,7 @@ public sealed class WorkflowSession
         }
 
         Draft = ReconciliationEngine.AcknowledgeTransfer(Draft, source, kind);
+        MarkNewerReconciliationActivity();
         Recompute();
     }
 
@@ -395,6 +472,7 @@ public sealed class WorkflowSession
         }
 
         Draft = ReconciliationEngine.UndoTransferAcknowledgement(Draft, source, kind);
+        MarkNewerReconciliationActivity();
         Recompute();
     }
 
@@ -419,6 +497,7 @@ public sealed class WorkflowSession
         }
 
         Draft = null;
+        _hasNewerReconciliationActivity = _imported.Count > 0 || _pendingCorrections.Count > 0;
         Recompute();
     }
 
@@ -430,7 +509,7 @@ public sealed class WorkflowSession
             throw new InvalidOperationException("There is no completed reconciliation to reopen.");
         }
 
-        if (_imported.Count != 0 || _pending.Count != 0 || _pendingCorrections.Count != 0)
+        if (_hasNewerReconciliationActivity || Draft?.IsLocked == true)
         {
             throw new InvalidOperationException("The latest reconciliation cannot be reopened after a newer reconciliation has started.");
         }
@@ -452,6 +531,7 @@ public sealed class WorkflowSession
             IsSettled = false,
             IsLocked = true,
         };
+        _hasNewerReconciliationActivity = false;
         Recompute();
     }
 
@@ -467,7 +547,9 @@ public sealed class WorkflowSession
         Draft,
         _completed,
         ThemeSettings.Load(),
-        _pendingCorrections);
+        _pendingCorrections,
+        _acceptedCorrectionBaselines,
+        _hasNewerReconciliationActivity);
 
     /// <summary>Restores a previously saved workflow without re-deriving funding sources.</summary>
     public void FromState(ScenarioState state)
@@ -491,6 +573,17 @@ public sealed class WorkflowSession
         _pendingCorrections.Clear();
         _pendingCorrections.AddRange(state.PendingCorrections ?? []);
         Draft = state.Draft;
+        _acceptedCorrectionBaselines.Clear();
+        foreach ((string id, Transaction transaction) in state.AcceptedCorrectionBaselines ?? new Dictionary<string, Transaction>())
+        {
+            _acceptedCorrectionBaselines[id] = transaction;
+        }
+        ReconstructAcceptedCorrectionBaselines();
+
+        _hasNewerReconciliationActivity = state.HasNewerReconciliationActivity
+            || _imported.Count > 0
+            || _pending.Count > 0
+            || _pendingCorrections.Count > 0;
 
         if (Draft is not null)
         {
@@ -510,6 +603,66 @@ public sealed class WorkflowSession
             throw new InvalidOperationException($"{subject} cannot change after the first transfer locks the reconciliation.");
         }
     }
+
+    private void MarkNewerReconciliationActivity()
+    {
+        if (_completed.Count > 0)
+        {
+            _hasNewerReconciliationActivity = true;
+        }
+    }
+
+    private void RefreshAcceptedCorrectionBaselines()
+    {
+        foreach (Transaction replacement in Allocated.Where(transaction =>
+            string.Equals(transaction.Type, "Correction replacement", StringComparison.Ordinal)
+            && !string.IsNullOrEmpty(transaction.LinkedTransactionId)))
+        {
+            if (_acceptedCorrectionBaselines.TryGetValue(replacement.LinkedTransactionId, out Transaction? baseline))
+            {
+                _acceptedCorrectionBaselines[replacement.LinkedTransactionId] = baseline with
+                {
+                    FundingSource = replacement.FundingSource,
+                    ActualGbpAmount = replacement.ActualGbpAmount,
+                };
+            }
+        }
+    }
+
+    private void ReconstructAcceptedCorrectionBaselines()
+    {
+        IEnumerable<Transaction> allTransactions = _completed
+            .SelectMany(reconciliation => reconciliation.Transactions)
+            .Concat(Draft?.Transactions ?? _imported);
+        foreach (Transaction replacement in allTransactions.Where(transaction =>
+            string.Equals(transaction.Type, "Correction replacement", StringComparison.Ordinal)
+            && !string.IsNullOrEmpty(transaction.LinkedTransactionId)))
+        {
+            if (_acceptedCorrectionBaselines.ContainsKey(replacement.LinkedTransactionId))
+            {
+                continue;
+            }
+
+            Transaction? original = _completed
+                .SelectMany(reconciliation => reconciliation.Transactions)
+                .FirstOrDefault(transaction => string.Equals(transaction.Id, replacement.LinkedTransactionId, StringComparison.Ordinal));
+            if (original is not null)
+            {
+                _acceptedCorrectionBaselines[replacement.LinkedTransactionId] = replacement with
+                {
+                    Id = replacement.LinkedTransactionId,
+                    Type = original.Type,
+                    LinkedTransactionId = original.LinkedTransactionId,
+                };
+            }
+        }
+    }
+
+    private int NextCorrectionSequence(string transactionId) =>
+        _completed.SelectMany(reconciliation => reconciliation.Transactions)
+            .Concat(_imported)
+            .Count(transaction => string.Equals(transaction.LinkedTransactionId, transactionId, StringComparison.Ordinal)
+                && string.Equals(transaction.Type, "Correction replacement", StringComparison.Ordinal)) + 1;
 
     private static int FindById(List<Transaction> transactions, string id) =>
         transactions.FindIndex(transaction => string.Equals(transaction.Id, id, StringComparison.Ordinal));

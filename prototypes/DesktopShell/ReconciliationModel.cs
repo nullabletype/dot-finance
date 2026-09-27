@@ -101,4 +101,6 @@ public sealed record ScenarioState(
     ReconciliationDraft? Draft,
     IReadOnlyList<ReconciliationDraft> CompletedReconciliations,
     string ThemePreference,
-    IReadOnlyList<PendingTransactionCorrection>? PendingCorrections = null);
+    IReadOnlyList<PendingTransactionCorrection>? PendingCorrections = null,
+    IReadOnlyDictionary<string, Transaction>? AcceptedCorrectionBaselines = null,
+    bool HasNewerReconciliationActivity = false);
