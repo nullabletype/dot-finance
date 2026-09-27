@@ -12,7 +12,8 @@ const transcript = { startedAt: new Date().toISOString(), authorisation: 'Explic
   credentialBoundary: 'Existing manual operator gh session; observed permissions recorded separately; not least privilege or unattended authority',
   events: [] };
 const initial = tracker.status();
-assert.equal(initial.markerComments, 0, 'Live trial requires a clean sandbox without the marked comment');
+assert.ok(initial.markerComments <= 1, 'Live trial permits at most the single marked comment');
+assert.equal(initial.markerCurrent, false, 'Live trial requires a missing or deliberately superseded marked comment');
 assert.equal(initial.projectStatus, 'Todo', 'Live trial requires sandbox #10 to begin in Todo');
 transcript.events.push({ type: 'initial', state: initial });
 try {
@@ -24,6 +25,7 @@ try {
 }
 const afterComment = tracker.status();
 assert.equal(afterComment.markerComments, 1);
+assert.equal(afterComment.markerCurrent, true);
 assert.equal(afterComment.projectStatus, 'Todo');
 transcript.events.push({ type: 'reconciled-comment', state: afterComment });
 try {
@@ -35,6 +37,7 @@ try {
 }
 const afterProject = tracker.status();
 assert.equal(afterProject.markerComments, 1);
+assert.equal(afterProject.markerCurrent, true);
 assert.equal(afterProject.projectStatus, 'In Progress');
 transcript.events.push({ type: 'reconciled-project', state: afterProject });
 const replay = tracker.advance();
@@ -43,6 +46,7 @@ transcript.events.push({ type: 'idempotent-replay', receipt: replay });
 const reset = tracker.reset();
 assert.equal(reset.after.projectStatus, 'Todo');
 assert.equal(reset.after.markerComments, 1);
+assert.equal(reset.after.markerCurrent, true);
 transcript.events.push({ type: 'bounded-cleanup', receipt: reset });
 transcript.completedAt = new Date().toISOString();
 const directory = resolve('artifacts/controller/tracker');
