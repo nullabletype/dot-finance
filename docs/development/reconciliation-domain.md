@@ -1,0 +1,34 @@
+# Production reconciliation domain
+
+Issue #28 implements the pure financial domain. The desktop still opens the minimal foundation window; application use cases, parsing, persistence and workflow screens remain owned by later issues.
+
+`FundingConfiguration` validates stable account identities, explicit protected minima and configured savings priority. `AllocationRules` has no household defaults. `ImportedTransaction` retains the export fields, including the original account name separately from its configured account ID, while requiring the future verified import adapter to supply a normalised activity kind and signed amount (purchase negative, refund positive). GBP values have decimal penny precision; foreign activity needs an explicit signed actual GBP amount. No exchange rate is inferred.
+
+`FundingCalculator` resolves purchase overrides, category/subcategory rules and linked-refund responsibility. It calculates signed source contributions, reimbursements, reporting subtotals, protected-balance shortfalls and the personal funding order. Projections use actual suggested personal transfers, so insufficient funds cannot masquerade as a funded intermediate account. The intermediate deficit is reported separately. A source already below its minimum requires an external top-up even when a refund would later lift its projected balance.
+
+`ReconciliationBook` owns the single unfinished reconciliation. Dates and reconciliation identities are supplied explicitly. Imports are keyed by transaction ID, conflicting duplicates require a selected version, and changed settled or reserved transactions require an explicit correction decision. Rule previews do not mutate the draft. The first transfer acknowledgement freezes the transaction set and agreed amounts. Later imports wait for the next draft, and only Card paid settles the included transactions together. Balance updates after locking represent current reality; projection applies only outstanding steps. Undo and reopening change records without pretending to reverse bank movements; callers should collect current balances after those corrections.
+
+Completed snapshots, the settled baseline and every accepted correction's before/after transaction versions are immutable. The effective transaction view may advance after correction, but historical descriptions, notes, dates and allocations remain inspectable. Correction entries retain the original category attribution on reversals and the accepted attribution on replacements. Their signed amounts participate in the same live source/category/reporting totals as new activity. Explicit correction audit records link those versions to the reconciliation that contains the adjustment.
+
+The owner confirmed two edge cases on 2026-09-27: reassigning a £100 Joint purchase after a £20 linked refund moves the remaining £80 responsibility, and future linked refunds follow the corrected responsibility; a non-intermediate account below its protected minimum needs an external top-up rather than a generated cross-source subsidy. These decisions are recorded in the specification and issue #28.
+
+## Requirement evidence
+
+All names below are tests in `tests/DotFinance.Domain.Tests`.
+
+| Requirement | Direct evidence |
+| --- | --- |
+| Identity, baseline and late imports | `BaselinePreservesSearchableFieldsWithoutInventingReconciliationHistory`, `ConflictingDuplicatesBlockUntilExplicitSelectionAndReplayIsIdempotent` |
+| Retained source fields and currency | `EditableImportsUpdateAllRetainedFieldsAndInvalidateChangedForeignValuation`, `InvalidImportsAreAtomicAndAllSourceFieldsParticipateInCorrectionDetection`, `ForeignSettledCorrectionRequiresFreshValuationBeforeDeltaAcceptance` |
+| Rules, overrides, refunds and reviews | `AllocationPrecedenceHistoryAndReviewsAreExplicit`, `RefundOverrideWinsAndUnlinkedRefundFallsBackToItsCategory`, `LiveTotalsIgnoreUnappliedRulePreviewAndPreserveOverrides`, `UnknownPaymentAndUncategorisedReviewsCannotBeBypassedByCompletion` |
+| Delta corrections and immutable audit | `CorrectionUsesDeltaAndReportsSignedCategoryEffectsWithoutReplaying`, `CorrectionRebalancesNetAfterRefundAndFutureRefundUsesCorrectedSource`, `AcceptedCorrectionsPreserveBaselineAndEveryBeforeAfterVersion` |
+| Purchases, reimbursements, negative contributions, surplus | `WorkedExampleUsesSignedResponsibilitiesAndPersonalPriority`, `PersonalPaidBillReimbursesWithoutDoubleDeductionOrCardTargetChange`, `RefundsProduceOutgoingContributionAndSurplusStaysIntermediate`, `OnlyCardAndQualifyingPersonalPaidBillsEnterAllocations` |
+| Minimums, personal order and no subsidy | `MinimumBoundaryDoesNotSpendProtectedMoney`, `IntermediateDeficitIsRestoredAndSavingsFollowConfiguredPriority`, `ShortfallsNeverSubsidiseJointAndProjectionsUseOnlyActualFunding`, `BelowMinimumSourceRequiresExternalTopUpEvenWithoutOutgoingTransfer`, `IncomingRefundDoesNotReplaceRequiredExternalTopUp` |
+| Lock, reservation and next draft | `FirstTransferLocksAndReservesUntilCardPaidSettlesEverything`, `LockedDuplicateResolutionQueuesCorrectionWithoutChangingAgreedAmounts` |
+| Acknowledgements, discrepancies and current balances | `DiscrepancyRequiresAcknowledgementAndChangingTargetResetsIt`, `ProjectionIgnoresAcknowledgedStepsFromCurrentBalances`, `ShortfallBlocksAffectedAcknowledgementAndTopUpKeepsAgreedAmounts`, `OutgoingRefundMustBeAcknowledgedBeforeCardPaid`, `OutgoingRefundWaitsForIncomingFundsWithoutChangingBalancesOnRejection` |
+| Undo, reopen and completion | `UndoKeepsLockAndCurrentBalancesWithoutInventingReverseMovement`, `LatestCompletionCanReopenUntilNewDraftStartsAndDoesNotReversePayment`, `CompletedCardPaymentIsNotProjectedAgain` |
+| Determinism, decimal contract and conservation | `InputOrderingAndMutableCallerCollectionsCannotChangeResults`, `ConfigurationAndCurrencyRejectAmbiguousInputs`, `PlanningRejectsDuplicateAllocationsAndInvalidAdjustmentMoney`, `ProjectionConservesMoneyAcrossSignedContributionsAndTargets` |
+
+The normal production build runs the domain tests, architectural checks and `scripts/domain-mutations.mjs`. The mutation harness creates disposable OS-temporary copies, proves a passing baseline, and requires actual test failures for six deliberate faults: funding sign, protected-money spending, first-acknowledgement lock, settlement membership, correction reversal sign and completion shortfall enforcement. Compile errors and infrastructure failures never count as caught mutations. The source checkout is never modified by the harness.
+
+The project reuses the supported, pinned .NET 10 and xUnit/MTP stack reviewed in `production-foundation-support.md`; it introduces no production runtime dependency. Exact tested commits, independent review and native CI results are recorded on the PR. History rewriting changed earlier foundation commit identities, so their original runs are not evidence for new SHAs.

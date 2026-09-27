@@ -36,7 +36,7 @@ ID, Date, Amount, Account, Bank, Currency, Category, Subcategory, Type, Tags, Co
 
 Retain all fields. Display ID, Date, Amount, Account, Bank, Category, Type, Counterparty, Merchant, and Notes in the main transaction list. Verify the actual delimiter, quoting, date formats, amount signs, and transaction types before implementing the parser; support for a particular delimiter must be based on the export format, not the presentation of this field list.
 
-Transaction ID is unique. Re-importing an ID must not create a duplicate purchase or reimbursement. Update changed unsettled transactions in unlocked drafts. Changes to settled transactions require explicit review: accepted corrections create adjustments in the next reconciliation, preserving the original history. For example, reassigning a settled purchase from Personal to Joint creates a reimbursement of the same amount from Joint next time.
+Transaction ID is unique. Re-importing an ID must not create a duplicate purchase or reimbursement. Update changed unsettled transactions in unlocked drafts. Changes to settled transactions require explicit review: accepted corrections create adjustments in the next reconciliation, preserving the original history. For example, reassigning a settled purchase from Personal to Joint creates a reimbursement from Joint next time. When linked refunds have already reduced that purchase, rebalance the net remaining responsibility: a £100 Joint purchase with a £20 refund corrected to Personal creates an £80 adjustment. Future linked refunds follow the corrected responsibility; original settled history remains unchanged.
 
 Initial setup accepts a baseline CSV containing only transactions the user confirms are already settled. Import all IDs as already settled and retain searchable transaction history. Do not invent historical transfer amounts or balances. Full reconciliation history begins with the first reconciliation managed in the app.
 
@@ -81,7 +81,7 @@ Additional personal transfers = max(0,
 
 Show transfers by source and projected balances after transfers and the card payment. Show funding needed to restore a minimum separately within its transfer total.
 
-If Joint or Shared Savings lacks available funds, show the shortfall and block confirmation of the affected transfer. Do not shift its contribution to Personal. If combined available personal funds are insufficient, warn with the shortfall and block completion. A plan that breaches a protected minimum cannot be treated as fully funded.
+If Joint or Shared Savings lacks available funds, show the shortfall and block confirmation of the affected transfer. Do not shift its contribution to Personal. If combined available personal funds are insufficient, warn with the shortfall and block completion. A plan that breaches a protected minimum cannot be treated as fully funded. A non-intermediate funding account already below its minimum requires an external top-up and an updated entered balance before completion; do not invent a restoration transfer from another funding source.
 
 ## Guided workflow and locking
 
