@@ -8,7 +8,7 @@ public enum VaultStage
 }
 
 public sealed record VaultSecurityProfile(string Cipher, int KdfIterations, bool LegacyMode,
-    int PlaintextHeaderBytes, bool HmacCheck);
+    int PlaintextHeaderBytes, bool HmacCheck, string NativeVersion, string SQLiteVersion);
 
 public sealed class VaultAccessException(string message, Exception? innerException = null) : Exception(message, innerException);
 public sealed class VaultMigrationException(string message, Exception? innerException = null) : Exception(message, innerException);

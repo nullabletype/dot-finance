@@ -10,13 +10,15 @@ Wrong passwords and damaged or unauthenticated database pages return the same me
 
 ## Format and durability
 
-Schema version 1 contains strict `schema_history` and single-row `vault_state` tables. The payload is a versioned, storage-neutral export of the complete reconciliation book, including configuration, rules, imported records, settlement/effective views, corrections and conflicts, overrides, history, audit entries, used identities, current adjustments and the unfinished draft. Restore validates SQLite integrity, the schema version, authenticated decryption and every domain-state invariant before accepting a file.
+Schema version 1 contains strict metadata and keyed entity tables. Configuration, rules and the unfinished draft live in the singleton `book_state` row; imported records, settlement/effective views, corrections and conflicts, overrides, history, audit entries, used identities, current adjustments and baseline allocations use independently keyed rows. Each row has a trim-safe, storage-neutral domain payload. Saves upsert changed rows and delete stale keys in one transaction rather than rewriting a complete state document. Restore validates SQLite integrity, the schema version, authenticated decryption and every domain-state invariant before accepting a file.
 
 The file URI pins `chacha20`, non-legacy mode, authenticated-page checking, no plaintext header and 600,000 PBKDF2-HMAC-SHA256 iterations. Working saves use full-synchronous SQLite transactions and delete-mode journals. A cancelled or terminated save rolls back when the vault next opens.
 
 ## Backup and restore
 
 Backup writes `<chosen-name>.partial` in the destination directory, uses SQLite's online backup API into a separately keyed destination connection, validates integrity and complete state, then replaces the chosen backup name. Cancellation, termination or a filesystem failure leaves the previous complete backup unchanged. A partial suffix is never presented as a valid backup.
+
+The application completion use case acknowledges the card payment, commits the completed reconciliation to the working vault, then refreshes the configured encrypted backup. If backup replacement fails, the completed working state remains durable and the previous valid backup remains available; the backup step can be retried without repeating the financial transition.
 
 Restore copies the selected backup to `<working-name>.restore-partial`, unlocks and validates it, then replaces the closed working database in the same directory. If a valid working database already exists, restore first opens it to complete any SQLite crash recovery. A wrong password, damaged backup, cancelled validation or failed replacement leaves that working database unchanged.
 

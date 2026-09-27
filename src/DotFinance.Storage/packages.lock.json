@@ -46,6 +46,12 @@
           "SQLitePCLRaw.core": "3.0.2"
         }
       },
+      "dotfinance.application": {
+        "type": "Project",
+        "dependencies": {
+          "DotFinance.Domain": "[1.0.0, )"
+        }
+      },
       "dotfinance.domain": {
         "type": "Project"
       }

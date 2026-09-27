@@ -34,12 +34,15 @@ run(['--vault-interrupt', 'save', workspace], true);
 run(['--vault-recovery', workspace]);
 run(['--vault-interrupt', 'backup', workspace], true);
 run(['--vault-recovery', workspace]);
+run(['--vault-interrupt', 'restore', workspace], true);
+run(['--vault-recovery', workspace]);
 
 if (readdirSync(isolated).join() !== build.executable) throw new Error('Vault smoke created a distributed sidecar');
 const extracted = readdirSync(extraction, { recursive: true }).filter(path => /sqlite3mc/i.test(path));
 if (extracted.length !== 1) throw new Error(`Expected one extracted SQLite3MC library; found ${extracted.join(', ')}`);
 const receipt = JSON.parse(readFileSync(join(workspace, 'vault-receipt.json'), 'utf8'));
-if (receipt.schemaVersion !== 1 || receipt.cipher !== 'chacha20' || receipt.kdfIterations !== 600000)
+if (receipt.schemaVersion !== 1 || receipt.cipher !== 'chacha20' || receipt.kdfIterations !== 600000
+    || !receipt.nativeVersion.includes('2.4.0') || receipt.sqLiteVersion !== '3.53.4')
   throw new Error('Vault receipt does not match the production security policy');
 writeFileSync(join(scratch, 'smoke.json'), JSON.stringify({ commit: build.commit, rid: build.rid, receipt, extracted }, null, 2));
 console.log(`PASS: production encrypted-vault save, interruption and recovery (${build.rid}); evidence: ${scratch}`);

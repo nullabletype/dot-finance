@@ -65,24 +65,37 @@ internal static class StorageScenario
             if (mode == "continue") vault.CreateBackup(backup);
         }
 
-        using (EncryptedVault reopened = EncryptedVault.Unlock(database, password)) AssertExpected(reopened.Load());
+        VaultSecurityProfile profile;
+        using (EncryptedVault reopened = EncryptedVault.Unlock(database, password))
+        {
+            AssertExpected(reopened.Load());
+            profile = reopened.SecurityProfile();
+        }
         InspectManagedFiles(workspace, password);
-        WriteReceipt(workspace, mode, database);
+        WriteReceipt(workspace, mode, database, profile);
         return 0;
     }
 
     private static int Interrupt(string operation, string workspace, ReadOnlySpan<char> password)
     {
-        string database = Path.Combine(workspace, "working.db");
-        using EncryptedVault vault = EncryptedVault.Unlock(database, password);
         InlineProgress progress = new(stage =>
         {
             bool requested = operation == "save" && stage == VaultStage.BeforeSaveCommit
-                || operation == "backup" && stage == VaultStage.BackupStaged;
+                || operation == "backup" && stage == VaultStage.BackupStaged
+                || operation == "restore" && stage == VaultStage.RestoreStaged;
             if (!requested) return;
             Process.GetCurrentProcess().Kill();
             Thread.Sleep(Timeout.Infinite);
         });
+        string database = Path.Combine(workspace, "working.db");
+        if (operation == "restore")
+        {
+            EncryptedVault.Restore(Path.Combine(workspace, "portable.dotfinance-backup"),
+                Path.Combine(workspace, "restored.db"), password, progress);
+            throw new InvalidOperationException("The requested abrupt interruption did not occur.");
+        }
+
+        using EncryptedVault vault = EncryptedVault.Unlock(database, password);
         if (operation == "save")
         {
             ReconciliationBook changed = vault.Load();
@@ -104,13 +117,18 @@ internal static class StorageScenario
     {
         string database = Path.Combine(workspace, "working.db");
         string backup = Path.Combine(workspace, "portable.dotfinance-backup");
-        using (EncryptedVault vault = EncryptedVault.Unlock(database, password)) AssertExpected(vault.Load());
+        VaultSecurityProfile profile;
+        using (EncryptedVault vault = EncryptedVault.Unlock(database, password))
+        {
+            AssertExpected(vault.Load());
+            profile = vault.SecurityProfile();
+        }
         string restored = Path.Combine(workspace, "restored.db");
         DeleteManaged(restored);
         EncryptedVault.Restore(backup, restored, password);
         using (EncryptedVault vault = EncryptedVault.Unlock(restored, password)) AssertExpected(vault.Load());
         InspectManagedFiles(workspace, password);
-        WriteReceipt(workspace, "recovery", database);
+        WriteReceipt(workspace, "recovery", database, profile);
         return 0;
     }
 
@@ -184,11 +202,12 @@ internal static class StorageScenario
         }
     }
 
-    private static void WriteReceipt(string workspace, string mode, string database)
+    private static void WriteReceipt(string workspace, string mode, string database, VaultSecurityProfile profile)
     {
         byte[] state = JsonSerializer.SerializeToUtf8Bytes(RepresentativeBook().ExportState(),
             StorageScenarioJsonContext.Default.ReconciliationBookState);
-        VaultReceipt receipt = new(mode, EncryptedVault.CurrentSchemaVersion, "chacha20", EncryptedVault.KdfIterations,
+        VaultReceipt receipt = new(mode, EncryptedVault.CurrentSchemaVersion, profile.Cipher, profile.KdfIterations,
+            profile.NativeVersion, profile.SQLiteVersion,
             Convert.ToHexString(SHA256.HashData(state)).ToLowerInvariant(), new FileInfo(database).Length,
             Environment.OSVersion.Platform.ToString());
         File.WriteAllText(Path.Combine(workspace, "vault-receipt.json"),

@@ -198,13 +198,19 @@
           "xunit.v3.runner.common": "[4.0.1]"
         }
       },
+      "dotfinance.application": {
+        "type": "Project",
+        "dependencies": {
+          "DotFinance.Domain": "[1.0.0, )"
+        }
+      },
       "dotfinance.domain": {
         "type": "Project"
       },
       "dotfinance.storage": {
         "type": "Project",
         "dependencies": {
-          "DotFinance.Domain": "[1.0.0, )",
+          "DotFinance.Application": "[1.0.0, )",
           "Microsoft.Data.Sqlite.Core": "[10.0.12, )",
           "SQLite3MC.PCLRaw.bundle": "[2.4.0, )",
           "SQLitePCLRaw.core": "[3.0.5, )"

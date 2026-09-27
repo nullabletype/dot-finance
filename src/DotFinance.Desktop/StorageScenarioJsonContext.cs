@@ -5,7 +5,7 @@ using DotFinance.Domain;
 namespace DotFinance.Desktop;
 
 internal sealed record VaultReceipt(string Mode, int SchemaVersion, string Cipher, int KdfIterations,
-    string StateSha256, long EncryptedBytes, string Platform);
+    string NativeVersion, string SQLiteVersion, string StateSha256, long EncryptedBytes, string Platform);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(ReconciliationBookState))]

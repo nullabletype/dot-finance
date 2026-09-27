@@ -45,7 +45,7 @@ Sources checked on 2026-09-27:
 
 ## Enforcement and offline boundary
 
-Architecture checks enforce the allowed reference graph, reject production references to `prototypes/`, and reject Avalonia/SQLite dependencies in Domain and Application. When adapters are introduced, extend checks to keep concrete adapter usage in Desktop confined to composition. Project-graph checks alone cannot establish that restriction inside an assembly.
+Architecture checks enforce the allowed reference graph, reject production references to `prototypes/`, and reject Avalonia/SQLite dependencies in Domain and Application. Source-level checks keep concrete storage-adapter usage in Desktop confined to the named composition/native-validation source. Project-graph checks alone cannot establish that restriction inside an assembly.
 
 The shipped app has no HTTP services, telemetry, updater, financial-institution integration or hosted component. Build tooling may access registries and GitHub. Runtime network monitoring remains a separate validation gate: a reference check cannot prove no outbound attempts.
 

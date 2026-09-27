@@ -1,14 +1,14 @@
 using System.Diagnostics;
 using System.Globalization;
-using System.Text.Json;
 
+using DotFinance.Application;
 using DotFinance.Domain;
 
 using Microsoft.Data.Sqlite;
 
 namespace DotFinance.Storage;
 
-public sealed class EncryptedVault : IDisposable
+public sealed class EncryptedVault : IDisposable, IReconciliationVault
 {
     public const int CurrentSchemaVersion = 1;
     public const int KdfIterations = 600_000;
@@ -147,17 +147,9 @@ public sealed class EncryptedVault : IDisposable
         ThrowIfDisposed();
         try
         {
-            using SqliteCommand command = _connection.CreateCommand();
-            command.CommandText = "SELECT state_version, payload FROM vault_state WHERE id = 1;";
-            using SqliteDataReader reader = command.ExecuteReader();
-            if (!reader.Read() || reader.GetInt32(0) != ReconciliationBook.CurrentStateVersion)
-                throw new InvalidDataException("The encrypted vault does not contain a supported reconciliation state.");
-            byte[] payload = (byte[])reader[1];
-            ReconciliationBookState state = JsonSerializer.Deserialize(payload, VaultJsonContext.Default.ReconciliationBookState)
-                ?? throw new InvalidDataException("The encrypted reconciliation state is invalid.");
-            return ReconciliationBook.Restore(state);
+            return VaultStateStore.Read(_connection);
         }
-        catch (Exception exception) when (exception is SqliteException or JsonException or InvalidDataException or ArgumentException)
+        catch (Exception exception) when (exception is SqliteException or System.Text.Json.JsonException or InvalidDataException or ArgumentException)
         {
             throw new VaultAccessException(GenericAccessMessage, exception);
         }
@@ -169,17 +161,8 @@ public sealed class EncryptedVault : IDisposable
         ArgumentNullException.ThrowIfNull(book);
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
-        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(book.ExportState(), VaultJsonContext.Default.ReconciliationBookState);
         using SqliteTransaction transaction = _connection.BeginTransaction();
-        using SqliteCommand command = _connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = """
-            INSERT INTO vault_state (id, state_version, payload) VALUES (1, $stateVersion, $payload)
-            ON CONFLICT(id) DO UPDATE SET state_version = excluded.state_version, payload = excluded.payload;
-            """;
-        command.Parameters.AddWithValue("$stateVersion", ReconciliationBook.CurrentStateVersion);
-        command.Parameters.AddWithValue("$payload", payload);
-        command.ExecuteNonQuery();
+        VaultStateStore.Write(_connection, transaction, book.ExportState());
         progress?.Report(VaultStage.BeforeSaveCommit);
         cancellationToken.ThrowIfCancellationRequested();
         transaction.Commit();
@@ -201,13 +184,14 @@ public sealed class EncryptedVault : IDisposable
             {
                 _connection.BackupDatabase(staged);
                 ValidateIntegrity(staged);
+                VerifySecurityProfile(staged);
                 VerifyPersistedState(staged);
             }
             progress?.Report(VaultStage.BackupStaged);
             cancellationToken.ThrowIfCancellationRequested();
             _fileSystem.ReplaceFile(partial, destination);
         }
-        catch (Exception exception) when (exception is InvalidDataException or JsonException or ArgumentException)
+        catch (Exception exception) when (exception is InvalidDataException or System.Text.Json.JsonException or ArgumentException)
         {
             throw new VaultStorageException("The encrypted backup could not be validated.", exception);
         }
@@ -226,6 +210,12 @@ public sealed class EncryptedVault : IDisposable
         ThrowIfDisposed();
         return ReadSecurityProfile(_connection);
     }
+
+    void IReconciliationVault.Save(ReconciliationBook book, CancellationToken cancellationToken)
+        => Save(book, cancellationToken: cancellationToken);
+
+    void IReconciliationVault.CreateBackup(string backupPath, CancellationToken cancellationToken)
+        => CreateBackup(backupPath, cancellationToken: cancellationToken);
 
     public void Dispose()
     {
@@ -269,12 +259,27 @@ public sealed class EncryptedVault : IDisposable
                     version INTEGER PRIMARY KEY,
                     description TEXT NOT NULL
                 ) STRICT;
-                CREATE TABLE vault_state (
+                CREATE TABLE book_state (
                     id INTEGER PRIMARY KEY CHECK (id = 1),
                     state_version INTEGER NOT NULL,
-                    payload BLOB NOT NULL
+                    adjustment_sequence INTEGER NOT NULL,
+                    configuration BLOB NOT NULL,
+                    rules BLOB NOT NULL,
+                    current BLOB
                 ) STRICT;
-                INSERT INTO schema_history (version, description) VALUES (1, 'Initial encrypted reconciliation state');
+                CREATE TABLE imported_transactions (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
+                CREATE TABLE settled_transaction_ids (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
+                CREATE TABLE effective_transactions (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
+                CREATE TABLE pending_corrections (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
+                CREATE TABLE import_conflicts (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
+                CREATE TABLE funding_overrides (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
+                CREATE TABLE reconciliation_history (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
+                CREATE TABLE accepted_corrections (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
+                CREATE TABLE used_reconciliation_ids (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
+                CREATE TABLE current_adjustments (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
+                CREATE TABLE active_transaction_ids (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
+                CREATE TABLE settled_baseline (item_key TEXT PRIMARY KEY, sort_index INTEGER NOT NULL, payload BLOB NOT NULL) STRICT;
+                INSERT INTO schema_history (version, description) VALUES (1, 'Relational encrypted reconciliation state');
                 PRAGMA user_version = 1;
                 """;
             command.ExecuteNonQuery();
@@ -304,28 +309,22 @@ public sealed class EncryptedVault : IDisposable
 
     private static void VerifyPersistedState(SqliteConnection connection)
     {
-        using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = "SELECT state_version, payload FROM vault_state WHERE id = 1;";
-        using SqliteDataReader reader = command.ExecuteReader();
-        if (!reader.Read() || reader.GetInt32(0) != ReconciliationBook.CurrentStateVersion)
-            throw new InvalidDataException("The backup does not contain supported state.");
-        byte[] payload = (byte[])reader[1];
-        ReconciliationBookState state = JsonSerializer.Deserialize(payload, VaultJsonContext.Default.ReconciliationBookState)
-            ?? throw new InvalidDataException("The backup state is invalid.");
-        _ = ReconciliationBook.Restore(state);
+        _ = VaultStateStore.Read(connection);
     }
 
     private static VaultSecurityProfile ReadSecurityProfile(SqliteConnection connection)
         => new(ScalarText(connection, "PRAGMA cipher;"), ScalarInt(connection, "PRAGMA kdf_iter;"),
             ScalarInt(connection, "PRAGMA legacy;") != 0, ScalarInt(connection, "PRAGMA plaintext_header_size;"),
-            ScalarInt(connection, "PRAGMA hmac_check;") != 0);
+            ScalarInt(connection, "PRAGMA hmac_check;") != 0, ScalarText(connection, "SELECT sqlite3mc_version();"),
+            ScalarText(connection, "SELECT sqlite_version();"));
 
     private static void VerifySecurityProfile(SqliteConnection connection)
     {
         VaultSecurityProfile profile = ReadSecurityProfile(connection);
         if (!string.Equals(profile.Cipher, "chacha20", StringComparison.OrdinalIgnoreCase)
             || profile.KdfIterations != KdfIterations || profile.LegacyMode || profile.PlaintextHeaderBytes != 0
-            || !profile.HmacCheck)
+            || !profile.HmacCheck || !profile.NativeVersion.Contains("2.4.0", StringComparison.Ordinal)
+            || !string.Equals(profile.SQLiteVersion, "3.53.4", StringComparison.Ordinal))
             throw new InvalidDataException("The encrypted vault security profile differs from the production policy.");
     }
 

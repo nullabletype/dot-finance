@@ -1,18 +1,36 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateGraph } from '../../scripts/production-architecture.mjs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { validateAdapterConfinement, validateGraph } from '../../scripts/production-architecture.mjs';
 
 function graph() {
   return [
     { name: 'DotFinance.Domain', references: [], packages: ['Microsoft.NET.ILLink.Tasks'], assemblyReferences: [], frameworks: ['Microsoft.NETCore.App'], sources: [] },
     { name: 'DotFinance.Application', references: ['src/DotFinance.Domain/DotFinance.Domain.csproj'], packages: [], assemblyReferences: [], frameworks: ['Microsoft.NETCore.App'], sources: [] },
-    { name: 'DotFinance.Storage', references: ['src/DotFinance.Domain/DotFinance.Domain.csproj'], packages: ['Microsoft.Data.Sqlite.Core', 'SQLite3MC.PCLRaw.bundle', 'SQLitePCLRaw.core'], assemblyReferences: [], frameworks: ['Microsoft.NETCore.App'], sources: ['src/DotFinance.Storage/EncryptedVault.cs'] },
+    { name: 'DotFinance.Storage', references: ['src/DotFinance.Application/DotFinance.Application.csproj'], packages: ['Microsoft.Data.Sqlite.Core', 'SQLite3MC.PCLRaw.bundle', 'SQLitePCLRaw.core'], assemblyReferences: [], frameworks: ['Microsoft.NETCore.App'], sources: ['src/DotFinance.Storage/EncryptedVault.cs'] },
     { name: 'DotFinance.Desktop', references: ['src/DotFinance.Application/DotFinance.Application.csproj', 'src/DotFinance.Storage/DotFinance.Storage.csproj'], packages: ['Avalonia.Desktop', 'Avalonia.Themes.Fluent'], assemblyReferences: [], frameworks: ['Microsoft.NETCore.App'], sources: ['src/DotFinance.Desktop/App.cs'] }
   ];
 }
 
 test('accepts inward references with presentation dependencies confined to Desktop', () => {
   assert.doesNotThrow(() => validateGraph(graph()));
+});
+
+test('confines concrete storage usage to the Desktop validation composition source', () => {
+  const root = mkdtempSync(join(tmpdir(), 'dot-finance-architecture-'));
+  const desktop = join(root, 'src', 'DotFinance.Desktop');
+  mkdirSync(desktop, { recursive: true });
+  try {
+    writeFileSync(join(desktop, 'StorageScenario.cs'), 'using DotFinance.Storage; EncryptedVault vault;');
+    writeFileSync(join(desktop, 'App.cs'), 'internal sealed class App {}');
+    assert.doesNotThrow(() => validateAdapterConfinement(root));
+    writeFileSync(join(desktop, 'App.cs'), 'using DotFinance.Storage;');
+    assert.throws(() => validateAdapterConfinement(root), /usage escaped composition/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 for (const [label, mutate, error] of [

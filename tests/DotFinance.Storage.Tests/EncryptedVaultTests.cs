@@ -1,5 +1,6 @@
 using System.Text;
 
+using DotFinance.Application;
 using DotFinance.Domain;
 
 using Microsoft.Data.Sqlite;
@@ -45,11 +46,38 @@ public sealed class EncryptedVaultTests : IDisposable
         Assert.False(profile.LegacyMode);
         Assert.Equal(0, profile.PlaintextHeaderBytes);
         Assert.True(profile.HmacCheck);
+        Assert.Contains("2.4.0", profile.NativeVersion, StringComparison.Ordinal);
+        Assert.Equal("3.53.4", profile.SQLiteVersion);
 
         using SqliteConnection connection = OpenRaw(FilePath("working.db"));
         Assert.Equal(1L, Scalar(connection, "PRAGMA user_version;"));
         Assert.Equal(1L, Scalar(connection, "SELECT count(*) FROM schema_history WHERE version = 1;"));
-        Assert.Equal(1L, Scalar(connection, "SELECT count(*) FROM sqlite_schema WHERE name = 'vault_state' AND type = 'table';"));
+        Assert.Equal(1L, Scalar(connection, "SELECT count(*) FROM sqlite_schema WHERE name = 'book_state' AND type = 'table';"));
+        Assert.Equal(12L, Scalar(connection, "SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name IN ('imported_transactions', 'settled_transaction_ids', 'effective_transactions', 'pending_corrections', 'import_conflicts', 'funding_overrides', 'reconciliation_history', 'accepted_corrections', 'used_reconciliation_ids', 'current_adjustments', 'active_transaction_ids', 'settled_baseline');"));
+    }
+
+    [Fact]
+    public void CompletionSavesWorkingStateAndRefreshesConfiguredBackup()
+    {
+        string database = FilePath("working.db");
+        string backup = FilePath("automatic.dotfinance-backup");
+        ReconciliationBook book = StorageFixtures.RepresentativeBook();
+        book.RejectCorrection("baseline-2");
+        book.ResolveImportConflict("duplicate-1", book.ImportConflicts.Single().Candidates[0]);
+        if (!book.Current!.DiscrepancyAcknowledged) book.AcknowledgeDiscrepancy();
+        foreach (FundingTransfer transfer in book.Current.Transfers.Where(value => !value.Acknowledged).ToArray())
+            book.AcknowledgeTransfer(transfer.AccountId);
+
+        using EncryptedVault vault = EncryptedVault.Create(database, StorageFixtures.Password);
+        new ReconciliationCompletion(vault, backup).Complete(book, TestContext.Current.CancellationToken);
+
+        Assert.Null(book.Current);
+        Assert.True(File.Exists(backup));
+        Assert.Equal(StorageFixtures.CanonicalState(book), ReadState(database));
+        string restored = FilePath("restored.db");
+        EncryptedVault.Restore(backup, restored, StorageFixtures.Password,
+            cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal(StorageFixtures.CanonicalState(book), ReadState(restored));
     }
 
     [Fact]
@@ -184,7 +212,7 @@ public sealed class EncryptedVaultTests : IDisposable
         using (SqliteConnection raw = OpenRaw(migrationCandidate))
         {
             Assert.Equal(0L, Scalar(raw, "PRAGMA user_version;"));
-            Assert.Equal(0L, Scalar(raw, "SELECT count(*) FROM sqlite_schema WHERE name IN ('schema_history', 'vault_state');"));
+            Assert.Equal(0L, Scalar(raw, "SELECT count(*) FROM sqlite_schema WHERE name IN ('schema_history', 'book_state');"));
         }
 
         string future = FilePath("future.db");
@@ -256,7 +284,7 @@ public sealed class EncryptedVaultTests : IDisposable
         using (SqliteConnection raw = OpenRaw(database))
         {
             using SqliteCommand command = raw.CreateCommand();
-            command.CommandText = "UPDATE vault_state SET state_version = 2 WHERE id = 1;";
+            command.CommandText = "UPDATE book_state SET state_version = 2 WHERE id = 1;";
             Assert.Equal(1, command.ExecuteNonQuery());
         }
 
