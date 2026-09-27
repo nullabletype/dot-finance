@@ -4,4 +4,7 @@
     <Project Path="src/DotFinance.Application/DotFinance.Application.csproj" />
     <Project Path="src/DotFinance.Desktop/DotFinance.Desktop.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DotFinance.Domain.Tests/DotFinance.Domain.Tests.csproj" />
+  </Folder>
 </Solution>
