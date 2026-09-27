@@ -189,7 +189,7 @@ public sealed class MainWindow : Window
         TextBlock navigationLabel = SectionLabel("RECONCILIATION", new Thickness(10, 0, 0, 10));
         navigationLabel.FontSize = 10;
         content.Children.Add(navigationLabel);
-        AddStage(content, "Import", "upload", "3 fixtures");
+        AddStage(content, "Import", "upload", "4 fixtures");
         AddStage(content, "Review", "review", "transactions");
         AddStage(content, "Transfers", "arrow", "plan");
         AddStage(content, "Confirm", "check", "manual");
@@ -262,6 +262,7 @@ public sealed class MainWindow : Window
         fixtureButtons.Children.Add(ImportButton("Base card purchases", "synthetic-reconciliation.csv"));
         fixtureButtons.Children.Add(ImportButton("£60 Joint bill", "synthetic-reconciliation-bill.csv"));
         fixtureButtons.Children.Add(ImportButton("Refund example", "synthetic-refund.csv"));
+        fixtureButtons.Children.Add(ImportButton("Non-GBP review", "synthetic-non-gbp.csv"));
         StackPanel importContent = new() { Spacing = 14 };
         importContent.Children.Add(new TextBlock { Text = "Synthetic fixtures", FontSize = 16, FontWeight = FontWeight.SemiBold });
         importContent.Children.Add(MutedText("Re-importing an existing transaction ID will not create a duplicate."));
@@ -518,9 +519,10 @@ public sealed class MainWindow : Window
         button.Click += (_, _) =>
         {
             string path = Path.Combine(AppContext.BaseDirectory, "Fixtures", file);
-            (int added, int skipped) = Session.Import(path);
+            ImportResult result = Session.Import(path);
             string queued = Session.PendingTransactionCount > 0 ? $" {Session.PendingTransactionCount} transaction(s) queued for the next reconciliation." : string.Empty;
-            _importStatus.Text = $"Imported {Path.GetFileName(file)}: {added} added, {skipped} duplicate(s) skipped.{queued}";
+            string corrections = result.CorrectionsQueued > 0 ? $" {result.CorrectionsQueued} changed locked/settled transaction(s) require adjustment review." : string.Empty;
+            _importStatus.Text = $"Imported {Path.GetFileName(file)}: {result.Added} added, {result.Updated} updated, {result.Skipped} unchanged duplicate(s) skipped.{queued}{corrections}";
             Refresh();
         };
         return button;
@@ -749,10 +751,11 @@ public sealed class MainWindow : Window
         RefreshAcknowledgements();
         RefreshHistory();
         _targetBox.IsEnabled = Session.Draft?.IsLocked != true;
-        int reviewCount = Session.Allocated.Count(transaction => transaction.RequiresReview);
+        int transactionReviewCount = Session.Allocated.Count(transaction => transaction.RequiresReview);
+        int reviewCount = transactionReviewCount + Session.PendingCorrections.Count;
         _sessionReviewCount.Text = reviewCount == 0 ? "Everything is ready" : $"{reviewCount} item(s) need review";
         _sessionReviewCount.Foreground = reviewCount == 0 ? SuccessBrush : WarningBrush;
-        _reviewProgress.Text = $"{Session.Allocated.Count - reviewCount} of {Session.Allocated.Count} ready";
+        _reviewProgress.Text = $"{Session.Allocated.Count - transactionReviewCount} of {Session.Allocated.Count} ready";
         if (reviewCount == 0)
         {
             _reviewProgress.Foreground = SuccessBrush;
@@ -763,7 +766,7 @@ public sealed class MainWindow : Window
         }
         decimal net = Session.Allocated
             .Where(transaction => transaction.FundingSource is not null || transaction.RequiresReview)
-            .Sum(transaction => -transaction.Amount);
+            .Sum(transaction => -ReconciliationEngine.EffectiveGbpAmount(transaction));
         _netTotal.Text = Pounds(net);
     }
 
@@ -1025,7 +1028,11 @@ public sealed class MainWindow : Window
         heading.Children.Add(title);
         TextBlock amount = new()
         {
-            Text = SignedPounds(selected.Amount),
+            Text = selected.Currency.Equals("GBP", StringComparison.OrdinalIgnoreCase)
+                ? SignedPounds(selected.Amount)
+                : selected.ActualGbpAmount is { } actual
+                    ? $"{SignedPounds(actual)} GBP"
+                    : $"{selected.Amount:0.00} {selected.Currency}",
             FontFamily = MonospaceFont,
             FontSize = 19,
             FontWeight = FontWeight.Bold,
@@ -1046,6 +1053,22 @@ public sealed class MainWindow : Window
         facts.Children.Add(DetailField("SUBCATEGORY", string.IsNullOrWhiteSpace(selected.Subcategory) ? "—" : selected.Subcategory, 1, 1));
         content.Children.Add(facts);
         content.Children.Add(DetailField("IMPORT NOTE", TransactionNote(selected), 0, 0));
+        if (!selected.Currency.Equals("GBP", StringComparison.OrdinalIgnoreCase))
+        {
+            StackPanel conversion = new() { Spacing = 7 };
+            conversion.Children.Add(SubsectionTitle("Actual GBP charged amount"));
+            TextBox actualGbpBox = CompactTextBox(
+                selected.ActualGbpAmount?.ToString("0.00", CultureInfo.InvariantCulture) ?? string.Empty,
+                double.NaN);
+            actualGbpBox.HorizontalAlignment = HorizontalAlignment.Stretch;
+            actualGbpBox.PlaceholderText = "Signed GBP amount";
+            conversion.Children.Add(actualGbpBox);
+            Button recordGbp = ActionButton("Record GBP amount", "check", true);
+            recordGbp.HorizontalAlignment = HorizontalAlignment.Stretch;
+            recordGbp.Click += (_, _) => ApplyActualGbpAmount(selected.Id, actualGbpBox.Text);
+            conversion.Children.Add(recordGbp);
+            content.Children.Add(conversion);
+        }
         StackPanel correction = new() { Spacing = 7 };
         correction.Children.Add(SubsectionTitle("Accept correction"));
         TextBox categoryBox = CompactTextBox(selected.Category, double.NaN);
@@ -1081,9 +1104,62 @@ public sealed class MainWindow : Window
         }
     }
 
+    private void ApplyActualGbpAmount(string transactionId, string? value)
+    {
+        try
+        {
+            if (!decimal.TryParse(value, NumberStyles.Number | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out decimal amount))
+            {
+                throw new ArgumentException("Enter the signed GBP amount actually charged.");
+            }
+
+            Session.SetActualGbpAmount(transactionId, amount);
+            _previewText.Text = $"Recorded the actual GBP amount for {transactionId}.";
+            Refresh();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+        {
+            _previewText.Text = exception.Message;
+        }
+    }
+
     private void RefreshSidebar()
     {
         _sidebar.Children.Clear();
+        if (Session.PendingCorrections.Count > 0)
+        {
+            _sidebar.Children.Add(new TextBlock
+            {
+                Text = $"{Session.PendingCorrections.Count} changed locked/settled transaction(s) await explicit adjustment review.",
+                Foreground = WarningBrush,
+                FontWeight = FontWeight.SemiBold,
+                TextWrapping = TextWrapping.Wrap,
+            });
+            foreach (PendingTransactionCorrection correction in Session.PendingCorrections)
+            {
+                Grid row = new() { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+                row.Children.Add(MutedText($"{correction.Original.Id} · {correction.Original.Amount:0.00} → {correction.Updated.Amount:0.00}"));
+                Button accept = ActionButton(Session.Draft?.IsLocked == true ? "Next draft" : "Apply adjustment", "check");
+                accept.IsEnabled = Session.Draft?.IsLocked != true;
+                accept.Click += (_, _) =>
+                {
+                    try
+                    {
+                        Session.AcceptPendingCorrection(correction.Original.Id);
+                        _previewText.Text = $"Accepted {correction.Original.Id} as a reversal and replacement adjustment.";
+                        Refresh();
+                    }
+                    catch (InvalidOperationException exception)
+                    {
+                        _previewText.Text = exception.Message;
+                    }
+                };
+                Grid.SetColumn(accept, 1);
+                row.Children.Add(accept);
+                _sidebar.Children.Add(row);
+            }
+            _sidebar.Children.Add(new Separator { Background = LineBrush });
+        }
         foreach (FundingSource source in new[] { FundingSource.Joint, FundingSource.SharedSavings, FundingSource.Personal })
         {
             List<Transaction> matches = [.. Session.Allocated.Where(transaction => transaction.FundingSource == source)];
@@ -1195,7 +1271,10 @@ public sealed class MainWindow : Window
                         && account.Role is AccountRole.PrimaryPersonal or AccountRole.PersonalSavings));
             bool discrepancyBlocked = !transfer.Acknowledged
                 && draft is { Discrepancy: not 0m, DiscrepancyAcknowledged: false };
-            bool actionBlocked = blocked || discrepancyBlocked;
+            bool reviewBlocked = !transfer.Acknowledged
+                && (Session.Allocated.Any(transaction => transaction.RequiresReview)
+                    || draft?.IsLocked != true && Session.PendingCorrections.Count > 0);
+            bool actionBlocked = blocked || discrepancyBlocked || reviewBlocked;
             Button button = ActionButton(transfer.Acknowledged ? "Undo" : actionBlocked ? "Blocked" : "Acknowledge", transfer.Acknowledged ? "history" : "check", !transfer.Acknowledged && !actionBlocked);
             button.IsEnabled = transfer.Acknowledged || !actionBlocked;
             button.Click += (_, _) =>
@@ -1221,6 +1300,8 @@ public sealed class MainWindow : Window
         }
         bool canPay = allAcknowledged
             && Session.Plan.Shortfalls.Count == 0
+            && !Session.Allocated.Any(transaction => transaction.RequiresReview)
+            && Session.PendingCorrections.Count == 0
             && draft?.IsSettled != true
             && draft is not { Discrepancy: not 0m, DiscrepancyAcknowledged: false };
         Button pay = ActionButton(draft?.IsSettled == true ? "Card paid" : "Confirm card paid", "card", true);
@@ -1250,6 +1331,24 @@ public sealed class MainWindow : Window
             foreach (Transfer transfer in reconciliation.Transfers)
             {
                 item.Children.Add(MutedText($"{transfer.Source} · {transfer.Kind} · {Pounds(transfer.Amount)}"));
+            }
+            if (index == Session.CompletedReconciliations.Count - 1)
+            {
+                Button reopen = ActionButton("Reopen latest record", "history");
+                reopen.Click += (_, _) =>
+                {
+                    try
+                    {
+                        Session.ReopenLatestCompleted();
+                        _persistenceStatus.Text = "Reopened the latest completion. This changes the record only; it does not reverse external transfers or card payments.";
+                        Refresh();
+                    }
+                    catch (InvalidOperationException exception)
+                    {
+                        _persistenceStatus.Text = exception.Message;
+                    }
+                };
+                item.Children.Add(reopen);
             }
             _historyPanel.Children.Add(Card(item, new Thickness(14)));
         }

@@ -47,7 +47,18 @@ const checks = [
   ['refund', evidence.refund.jointContribution, evidence.expected.refund.joint],
   ['Joint shortfall', evidence.insufficientFunds.shortfalls.find(item => item.account === 'Joint')?.amount, evidence.expected.insufficientFunds.shortfall],
   ['duplicates added', evidence.duplicateImport.Added, evidence.expected.duplicateImport.added],
-  ['duplicates skipped', evidence.duplicateImport.Skipped, evidence.expected.duplicateImport.skipped]
+  ['duplicates skipped', evidence.duplicateImport.Skipped, evidence.expected.duplicateImport.skipped],
+  ['unresolved review blocked', evidence.reviewBlock.blocked, evidence.expected.reviewBlock.blocked],
+  ['unresolved review did not lock', evidence.reviewBlock.locked, evidence.expected.reviewBlock.locked],
+  ['non-GBP initially requires review', evidence.nonGbp.initiallyRequiresReview, true],
+  ['non-GBP review clears after GBP entry', evidence.nonGbp.requiresReviewAfterGbpEntry, false],
+  ['non-GBP actual amount', evidence.nonGbp.actualGbpAmount, evidence.expected.nonGbp.actualGbpAmount],
+  ['non-GBP Joint contribution', evidence.nonGbp.jointContribution, evidence.expected.nonGbp.jointContribution],
+  ['correction queued', evidence.correction.queued, evidence.expected.correction.queued],
+  ['correction consumed', evidence.correction.remaining, evidence.expected.correction.remaining],
+  ['correction adjustment transactions', evidence.correction.adjustmentTransactions, evidence.expected.correction.adjustmentTransactions],
+  ['correction Joint adjustment', evidence.correction.jointAdjustment, evidence.expected.correction.jointAdjustment],
+  ['correction preserves history', evidence.correction.preservedOriginalAmount, evidence.expected.correction.preservedOriginalAmount]
 ];
 for (const [name, actual, expected] of checks) {
   if (actual !== expected) throw new Error(`${name}: expected ${expected}, got ${actual}`);

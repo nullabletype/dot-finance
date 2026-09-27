@@ -146,6 +146,36 @@ internal static class LaunchEvidence
         duplicate.Import(Path.Combine(fixtureDirectory, "synthetic-reconciliation.csv"));
         (int Added, int Skipped) = duplicate.Import(Path.Combine(fixtureDirectory, "synthetic-reconciliation.csv"));
 
+        WorkflowSession reviewBlock = new();
+        reviewBlock.Import(Path.Combine(fixtureDirectory, "synthetic-reconciliation.csv"));
+        reviewBlock.AcknowledgeDiscrepancy();
+        bool unresolvedReviewBlocked;
+        try
+        {
+            reviewBlock.AcknowledgeTransfer("Joint", TransferKind.Funding);
+            unresolvedReviewBlocked = false;
+        }
+        catch (InvalidOperationException)
+        {
+            unresolvedReviewBlocked = true;
+        }
+
+        WorkflowSession nonGbp = new();
+        nonGbp.Import(Path.Combine(fixtureDirectory, "synthetic-non-gbp.csv"));
+        bool nonGbpInitiallyRequiresReview = nonGbp.Allocated.Single().RequiresReview;
+        nonGbp.SetActualGbpAmount("R-0200", -275m);
+
+        WorkflowSession correction = new();
+        correction.Import(Path.Combine(fixtureDirectory, "synthetic-reconciliation.csv"));
+        correction.SetOverride("R-0005", FundingSource.Joint);
+        correction.AcknowledgeDiscrepancy();
+        correction.AcknowledgeTransfer("Joint", TransferKind.Funding);
+        correction.Import(Path.Combine(fixtureDirectory, "synthetic-reconciliation-changed.csv"));
+        int queuedCorrections = correction.PendingCorrections.Count;
+        AcknowledgeOutstandingFunding(correction);
+        correction.AcknowledgeCardPaid();
+        correction.AcceptPendingCorrection("R-0001");
+
         return new
         {
             os = RuntimeInformation.OSDescription,
@@ -157,6 +187,23 @@ internal static class LaunchEvidence
             refund = WorkflowSnapshot(refund),
             insufficientFunds = WorkflowSnapshot(shortfall),
             duplicateImport = new { Added, Skipped, transactionCount = duplicate.Allocated.Count },
+            reviewBlock = new { blocked = unresolvedReviewBlocked, locked = reviewBlock.Draft?.IsLocked },
+            nonGbp = new
+            {
+                initiallyRequiresReview = nonGbpInitiallyRequiresReview,
+                requiresReviewAfterGbpEntry = nonGbp.Allocated.Single().RequiresReview,
+                actualGbpAmount = nonGbp.Allocated.Single().ActualGbpAmount,
+                jointContribution = Contribution(nonGbp.Plan, FundingSource.Joint),
+            },
+            correction = new
+            {
+                queued = queuedCorrections,
+                remaining = correction.PendingCorrections.Count,
+                adjustmentTransactions = correction.Allocated.Count,
+                jointAdjustment = Contribution(correction.Plan, FundingSource.Joint),
+                preservedOriginalAmount = correction.CompletedReconciliations.Single().Transactions
+                    .Single(transaction => transaction.Id == "R-0001").Amount,
+            },
             compactLayout,
             expected = new
             {
@@ -166,6 +213,9 @@ internal static class LaunchEvidence
                 refund = new { joint = -50m, direction = "outgoing reimbursement" },
                 insufficientFunds = new { account = "Joint", shortfall = 50m },
                 duplicateImport = new { added = 0, skipped = 6 },
+                reviewBlock = new { blocked = true, locked = false },
+                nonGbp = new { actualGbpAmount = -275m, jointContribution = 275m },
+                correction = new { queued = 1, remaining = 0, adjustmentTransactions = 2, jointAdjustment = 20m, preservedOriginalAmount = -300m },
             },
             scope = "Synthetic guided-reconciliation workflow evidence; not production acceptance."
         };
@@ -194,4 +244,13 @@ internal static class LaunchEvidence
 
     private static decimal Contribution(TransferPlan plan, FundingSource source) =>
         plan.Contributions.Single(contribution => contribution.Source == source).Total;
+
+    private static void AcknowledgeOutstandingFunding(WorkflowSession session)
+    {
+        foreach (Transfer transfer in session.Draft!.Transfers
+            .Where(transfer => transfer.Kind != TransferKind.CardPayment && !transfer.Acknowledged))
+        {
+            session.AcknowledgeTransfer(transfer.Source, transfer.Kind);
+        }
+    }
 }
