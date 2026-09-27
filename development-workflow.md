@@ -61,6 +61,8 @@ Persist enough state to resume an interrupted run: issue, branch and commit, att
 
 Use mutation checks for critical financial and settlement rules where they establish whether tests detect meaningful faults. Do not equate coverage percentages or agent review with proof of correctness.
 
+GitHub-hosted validation is staged to keep these gates sustainable. Every pull-request commit and every `main` commit runs the deterministic build, tests, formatting, controller trial, persistence smoke, and LikeC4 checks on Ubuntu. Adding the existing `in-review` label to a pull request runs native launch and workflow checks on macOS, Windows, and Linux for that reviewed commit; later commits rerun them while the label remains. Persistence-sensitive changes also run the macOS to Windows to Linux to macOS encrypted-backup cycle. The full native and persistence validations remain manually dispatchable for acceptance or release work. Superseded runs for the same pull request or branch are cancelled, and routine `main` builds do not repeat the native matrix that passed on the reviewed pull-request commit.
+
 ## LikeC4 architecture documentation
 
 Keep authored LikeC4 source under `docs/architecture/`, versioned alongside the implementation. Start with a small set of views: system context and offline boundary; major application components and storage; reconciliation and settlement flow; encrypted backup/restore flow. Add detail only when it aids understanding. Distinguish proposed architecture from implemented architecture explicitly.
