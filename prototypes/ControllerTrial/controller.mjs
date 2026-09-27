@@ -1,5 +1,5 @@
 // DISPOSABLE development harness. Never imported by the shipped application.
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync, openSync, closeSync, unlinkSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 const source = fileURLToPath(import.meta.url);
 const root = resolve(dirname(source), '../..');
 const policy = { corrections: 3, milliseconds: 90 * 60 * 1000, gates: ['validation', 'review'] };
+const sleeper = new Int32Array(new SharedArrayBuffer(4));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const policyHash = () => hash(Buffer.concat([readFileSync(source), readFileSync(resolve(dirname(source), 'supervisor.mjs'))]));
 function git(...args) {
@@ -139,11 +140,16 @@ export function run(directory, action, argument) {
       const receiptPath = resolve(directory, `process-${state.events.length}.json`);
       const args = ['prototypes/ControllerTrial/supervisor.mjs', action, argument || 'pass', String(process.pid),
         String(Math.max(1, policy.milliseconds - state.elapsedMs)), receiptPath];
-      const execution = spawnSync(process.execPath, args, {
-        cwd: root, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024,
+      // The supervisor must outlive a force-terminated controller on every
+      // platform so it can stop the validation tree and persist its receipt.
+      const supervisor = spawn(process.execPath, args, {
+        cwd: root, detached: true, stdio: 'ignore', windowsHide: true,
       });
+      supervisor.unref();
+      const receiptDeadline = Date.now() + Math.max(1, policy.milliseconds - state.elapsedMs) + 10000;
+      while (!existsSync(receiptPath) && Date.now() < receiptDeadline) Atomics.wait(sleeper, 0, 0, 25);
       const result = existsSync(receiptPath) ? JSON.parse(readFileSync(receiptPath, 'utf8')) :
-        { status: null, error: { code: execution.error?.code || 'SUPERVISOR_FAILED' } };
+        { status: null, error: { code: 'SUPERVISOR_RECEIPT_MISSING' } };
       const infrastructureFailure = result.status === 75 || result.error?.code === 'ENOENT';
       // Failure debt is independent of whether this checkout can accept evidence.
       state.correctionDue = (result.status !== 0 || Boolean(result.error)) && !infrastructureFailure;
