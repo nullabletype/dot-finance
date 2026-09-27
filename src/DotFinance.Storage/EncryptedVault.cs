@@ -20,12 +20,16 @@ public sealed class EncryptedVault : IDisposable, IReconciliationVault
 
     static EncryptedVault() => SQLitePCL.Batteries_V2.Init();
 
-    private EncryptedVault(SqliteConnection connection, ReadOnlySpan<char> password, IVaultFileSystem fileSystem)
+    private EncryptedVault(SqliteConnection connection, ReadOnlySpan<char> password, IVaultFileSystem fileSystem,
+        TimeSpan keyDerivationElapsed)
     {
         _connection = connection;
         _password = password.ToArray();
         _fileSystem = fileSystem;
+        KeyDerivationElapsed = keyDerivationElapsed;
     }
+
+    public TimeSpan KeyDerivationElapsed { get; }
 
     public static EncryptedVault Create(string databasePath, ReadOnlySpan<char> password)
         => Create(databasePath, password, VaultDependencies.Default);
@@ -53,11 +57,11 @@ public sealed class EncryptedVault : IDisposable, IReconciliationVault
         SqliteConnection? connection = null;
         try
         {
-            connection = OpenConnection(fullPath, password, SqliteOpenMode.ReadWriteCreate);
+            connection = OpenConnection(fullPath, password, SqliteOpenMode.ReadWriteCreate, out TimeSpan keyDerivationElapsed);
             ApplyMigrations(connection, dependencies.BeforeMigrationCommit);
             ConfigureDurability(connection);
             VerifySecurityProfile(connection);
-            return new EncryptedVault(connection, password, dependencies.FileSystem);
+            return new EncryptedVault(connection, password, dependencies.FileSystem, keyDerivationElapsed);
         }
         catch
         {
@@ -75,12 +79,12 @@ public sealed class EncryptedVault : IDisposable, IReconciliationVault
         SqliteConnection? connection = null;
         try
         {
-            connection = OpenConnection(fullPath, password, SqliteOpenMode.ReadWrite);
+            connection = OpenConnection(fullPath, password, SqliteOpenMode.ReadWrite, out TimeSpan keyDerivationElapsed);
             ValidateIntegrity(connection);
             ApplyMigrations(connection, dependencies.BeforeMigrationCommit);
             ConfigureDurability(connection);
             VerifySecurityProfile(connection);
-            return new EncryptedVault(connection, password, dependencies.FileSystem);
+            return new EncryptedVault(connection, password, dependencies.FileSystem, keyDerivationElapsed);
         }
         catch (VaultMigrationException)
         {
@@ -186,7 +190,7 @@ public sealed class EncryptedVault : IDisposable, IReconciliationVault
         DeleteManagedSet(_fileSystem, partial);
         try
         {
-            using (SqliteConnection staged = OpenConnection(partial, _password, SqliteOpenMode.ReadWriteCreate))
+            using (SqliteConnection staged = OpenConnection(partial, _password, SqliteOpenMode.ReadWriteCreate, out _))
             {
                 _connection.BackupDatabase(staged);
                 ValidateIntegrity(staged);
@@ -231,7 +235,8 @@ public sealed class EncryptedVault : IDisposable, IReconciliationVault
         _disposed = true;
     }
 
-    private static SqliteConnection OpenConnection(string path, ReadOnlySpan<char> password, SqliteOpenMode mode)
+    private static SqliteConnection OpenConnection(string path, ReadOnlySpan<char> password, SqliteOpenMode mode,
+        out TimeSpan keyDerivationElapsed)
     {
         string uri = new Uri(Path.GetFullPath(path)).AbsoluteUri
             + $"?cipher=chacha20&legacy=0&kdf_iter={KdfIterations.ToString(CultureInfo.InvariantCulture)}&plaintext_header_size=0&hmac_check=1";
@@ -245,7 +250,10 @@ public sealed class EncryptedVault : IDisposable, IReconciliationVault
             DefaultTimeout = 5
         };
         SqliteConnection connection = new(builder.ConnectionString);
+        Stopwatch stopwatch = Stopwatch.StartNew();
         connection.Open();
+        stopwatch.Stop();
+        keyDerivationElapsed = stopwatch.Elapsed;
         return connection;
     }
 

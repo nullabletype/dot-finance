@@ -303,14 +303,16 @@ public sealed class EncryptedVaultTests : IDisposable
             EncryptedVault.Unlock(FilePath("missing.db"), StorageFixtures.Password));
         Assert.Equal("The password is incorrect or the encrypted vault is damaged.", missing.Message);
 
-        EncryptedVault vault = EncryptedVault.Create(database, StorageFixtures.Password);
-        vault.Save(StorageFixtures.RepresentativeBook(), cancellationToken: TestContext.Current.CancellationToken);
+        EncryptedVault vault;
+        using (EncryptedVault created = EncryptedVault.Create(database, StorageFixtures.Password))
+            created.Save(StorageFixtures.RepresentativeBook(), cancellationToken: TestContext.Current.CancellationToken);
         byte[] original = File.ReadAllBytes(database);
         Assert.Throws<VaultStorageException>(() => EncryptedVault.Create(database, StorageFixtures.Password));
         Assert.Equal(original, File.ReadAllBytes(database));
         Assert.Throws<ArgumentException>(() => EncryptedVault.Restore(
             database, database, StorageFixtures.Password, cancellationToken: TestContext.Current.CancellationToken));
 
+        vault = EncryptedVault.Unlock(database, StorageFixtures.Password);
         vault.Dispose();
         Assert.Throws<ObjectDisposedException>(() => vault.Load());
         Assert.Throws<ObjectDisposedException>(() => vault.Save(StorageFixtures.RepresentativeBook(),

@@ -46,10 +46,8 @@ internal static class StorageScenario
         if (mode == "initialize")
         {
             DeleteManaged(database);
-            Stopwatch create = Stopwatch.StartNew();
             using EncryptedVault vault = EncryptedVault.Create(database, password);
-            create.Stop();
-            RequireKdfBudget(create.Elapsed);
+            RequireKdfBudget(vault.KeyDerivationElapsed);
             vault.Save(RepresentativeBook());
             vault.CreateBackup(backup);
         }
@@ -57,11 +55,9 @@ internal static class StorageScenario
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(inputBackup);
             DeleteManaged(database);
-            Stopwatch restore = Stopwatch.StartNew();
             EncryptedVault.Restore(inputBackup, database, password);
-            restore.Stop();
-            RequireKdfBudget(restore.Elapsed);
             using EncryptedVault vault = EncryptedVault.Unlock(database, password);
+            RequireKdfBudget(vault.KeyDerivationElapsed);
             AssertExpected(vault.Load());
             if (mode == "continue") vault.CreateBackup(backup);
         }
