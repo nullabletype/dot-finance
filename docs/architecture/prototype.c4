@@ -50,6 +50,19 @@ model {
   build = system 'Development build tooling' {
     description 'Node and LikeC4 validate diagrams and generate local/CI build artifacts. Not shipped with the application.'
   }
+  controller = system 'EXPERIMENTAL manual controller trial' {
+    description 'Disposable issue #4 development-only Node harness and process supervisor. Runs fixed validation commands with deadline and controller-liveness monitoring; persists budgets, source identity, evidence hashes and events. Synthetic approval has no acceptance authority.'
+  }
+  runfiles = system 'Controller scratch state and receipts' {
+    description 'Local single-writer checkpoints and command output, separate from financial data. Missing or changed evidence invalidates progress; changed policy requires review.'
+  }
+  tracker = system 'GitHub tracker sandbox' {
+    description 'Issue #10 and nullabletype user Project 2 are the only authorised live-write targets. Separate response-loss phases reconcile one marked comment and Todo/In Progress before retrying. Existing operator authentication is not an unattended least-privilege boundary.'
+  }
+  user -> controller 'Manually invokes bounded synthetic trials'
+  controller -> build 'Invokes fixed full-build entry point'
+  controller -> runfiles 'Checkpoints before execution and validates receipts on resume'
+  controller -> tracker 'Reconciles explicitly authorised manual sandbox writes'
   user -> prototype.ui 'Trials the synthetic guided workflow locally'
   prototype.vault -> localfiles 'Atomically writes encrypted files'
   build -> prototype 'Builds and publishes the desktop experiment'
@@ -71,5 +84,9 @@ views {
   view reconciliation {
     title 'EXPERIMENTAL — guided reconciliation and manual settlement flow'
     include user, prototype.ui, prototype.workflow, prototype.importer, prototype.engine, prototype.vault, prototype.settings, localfiles
+  }
+  view controllerTrial {
+    title 'EXPERIMENTAL — bounded manual controller and tracker recovery'
+    include user, controller, build, runfiles, tracker
   }
 }
