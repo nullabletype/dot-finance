@@ -10,7 +10,7 @@ public enum ReviewReason { Uncategorized, ActualGbpRequired, UnknownPaymentAccou
 // Amount is signed account activity: purchases negative, refunds positive. The import adapter
 // must normalise its verified format into this contract; source Type is retained independently.
 public sealed record ImportedTransaction(
-    string Id, DateOnly Date, decimal Amount, string AccountId, string Bank, string Currency,
+    string Id, DateOnly Date, decimal Amount, string Account, string AccountId, string Bank, string Currency,
     string Category, string Subcategory, string Type, string Tags, string Counterparty,
     string CustomName, string Merchant, string AdditionalDetails, string Notes,
     string LinkedTransactionId, TransactionKind Kind, decimal? ActualGbpAmount = null);
@@ -114,7 +114,7 @@ internal static class DomainGuard
     }
     internal static void Transaction(ImportedTransaction transaction)
     {
-        Text(transaction.Id); Text(transaction.AccountId); Text(transaction.Currency); Defined(transaction.Kind);
+        Text(transaction.Id); Text(transaction.Account); Text(transaction.AccountId); Text(transaction.Currency); Defined(transaction.Kind);
         if (transaction.Date == default) throw new ArgumentException("Supply a transaction date.");
         if (new[] { transaction.Bank, transaction.Category, transaction.Subcategory, transaction.Type,
             transaction.Tags, transaction.Counterparty, transaction.CustomName, transaction.Merchant,

@@ -20,7 +20,7 @@ internal static class Fixtures
     internal static AllocationRules Rules() => new([new("Groceries", FundingSource.Joint), new("Travel", FundingSource.SharedSavings)], [], [new("Travel", "Holiday", FundingSource.SharedSavings)]);
     internal static ImportedTransaction Tx(string id, decimal activity, string category = "Personal", string account = "card",
         string linked = "", string currency = "GBP", decimal? actual = null) => new(id, new(2026, 1, 1), activity,
-        account, "Synthetic bank", currency, category, "", activity > 0 ? "Refund" : "Purchase", "fictional", "Fictional shop",
+        "Fictional exported account", account, "Synthetic bank", currency, category, "", activity > 0 ? "Refund" : "Purchase", "fictional", "Fictional shop",
         "", "Fictional merchant", "Synthetic details", "Synthetic notes", linked,
         activity > 0 ? TransactionKind.Refund : TransactionKind.Purchase, actual);
     internal static ReconciliationBook Book() => new(Configuration(), Rules());

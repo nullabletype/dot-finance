@@ -264,7 +264,7 @@ public sealed class ReconciliationTests
         ImportedTransaction[] changes = [original with { Date = new(2026, 1, 2) }, original with { Bank = "Other fictional bank" },
             original with { Type = "Corrected type" }, original with { Tags = "changed" }, original with { Counterparty = "Changed" },
             original with { CustomName = "Changed" }, original with { Merchant = "Changed" }, original with { AdditionalDetails = "Changed" },
-            original with { Notes = "Changed" }, original with { AccountId = "primary" }, original with { Subcategory = "Changed" }];
+            original with { Notes = "Changed" }, original with { Account = "Renamed exported account" }, original with { AccountId = "primary" }, original with { Subcategory = "Changed" }];
         foreach (ImportedTransaction changed in changes)
         {
             Assert.Equal(1, book.Import([changed]).Corrections);
