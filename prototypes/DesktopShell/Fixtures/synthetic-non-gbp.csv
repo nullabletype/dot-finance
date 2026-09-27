@@ -1,0 +1,2 @@
+ID,Date,Amount,Account,Bank,Currency,Category,Subcategory,Type,Tags,Counterparty,Custom Name,Merchant,Additional details,Notes,Linked transaction ID
+R-0200,2026-09-14,-300.00,Fictional Amex,Example Bank,EUR,Groceries,,Purchase,travel,Example Market,,Example Market Europe,Synthetic foreign-currency purchase,Actual GBP amount requires review,
