@@ -2,7 +2,7 @@
 
 ## Goal and scope
 
-Provide a modern, offline desktop application for reconciling credit-card spending and calculating contributions from multiple funding sources. The app records manual acknowledgements; the user performs every transfer and card payment outside the app. Version one supports credit-card transaction reconciliation through standard CSV exports.
+Provide a modern, offline desktop application for reconciling credit-card spending and calculating contributions from multiple funding sources. The app records manual acknowledgements; the user performs every transfer and card payment outside the app. Version one supports credit-card transaction reconciliation through the verified Emma XLSX export contract; other provider formats are out of scope.
 
 Use C# and .NET 10. Support macOS, Linux, and Windows, with macOS as the primary platform. An iOS app is possible future scope. Choose the desktop framework and local database technology during planning; no hosted database is required.
 
@@ -28,17 +28,17 @@ Rule changes recalculate unsettled transactions in an unlocked draft, with a pre
 
 ## Transaction import and initial history
 
-Import transaction CSV exports with these fields:
+Import Emma transaction XLSX exports with these fields in this exact order:
 
 ```text
 ID, Date, Amount, Account, Bank, Currency, Category, Subcategory, Type, Tags, Counterparty, Custom Name, Merchant, Additional details, Notes, Linked transaction ID
 ```
 
-Retain all fields. Display ID, Date, Amount, Account, Bank, Category, Type, Counterparty, Merchant, and Notes in the main transaction list. Verify the actual delimiter, quoting, date formats, amount signs, and transaction types before implementing the parser; support for a particular delimiter must be based on the export format, not the presentation of this field list.
+Retain all fields. Display ID, Date, Amount, Account, Bank, Category, Type, Counterparty, Merchant, and Notes in the main transaction list. The verified `emma-xlsx-v1` contract defines workbook structure, cell representations, date format, amount syntax, limits, and conservative source-type handling. XLSX is a ZIP/XML package, so CSV delimiter and quoting rules do not apply. A different export variant requires sanitised structural evidence and an explicit versioned contract change.
 
 Transaction ID is unique. Re-importing an ID must not create a duplicate purchase or reimbursement. Update changed unsettled transactions in unlocked drafts. Changes to settled transactions require explicit review: accepted corrections create adjustments in the next reconciliation, preserving the original history. For example, reassigning a settled purchase from Personal to Joint creates a reimbursement from Joint next time. When linked refunds have already reduced that purchase, rebalance the net remaining responsibility: a £100 Joint purchase with a £20 refund corrected to Personal creates an £80 adjustment. Future linked refunds follow the corrected responsibility; original settled history remains unchanged.
 
-Initial setup accepts a baseline CSV containing only transactions the user confirms are already settled. Import all IDs as already settled and retain searchable transaction history. Do not invent historical transfer amounts or balances. Full reconciliation history begins with the first reconciliation managed in the app.
+Initial setup accepts a baseline XLSX export containing only transactions the user confirms are already settled. Import all IDs as already settled and retain searchable transaction history. Do not invent historical transfer amounts or balances. Full reconciliation history begins with the first reconciliation managed in the app.
 
 Include credit-card purchases and qualifying bills paid from configured personal accounts. Personal-account purchases categorised as Joint or Shared Savings generate reimbursements from that funding source through the intermediate account, reducing the personal contribution. They do not change the card payment target. Exclude account transfers and credit-card repayments from purchase allocations.
 
@@ -139,4 +139,4 @@ Use GitHub Issues and a GitHub Project for development ticketing. Use LikeC4 for
 
 The requirements above capture the refinement decisions. Confirm shared understanding before beginning implementation planning.
 
-ADR-0001 selects SQLite3MC-backed encrypted SQLite and ADR-0002 selects Avalonia on .NET for production planning. Parser details and the production implementation structure remain planning decisions; the committed synthetic CSV assumptions are not evidence of Emma's actual export format.
+ADR-0001 selects SQLite3MC-backed encrypted SQLite and ADR-0002 selects Avalonia on .NET for production planning. The owner-approved, sanitised evidence note and `emma-xlsx-v1` contract define the verified Emma export variant. Synthetic prototype CSV assumptions remain historical prototype data and are not evidence of another supported production format.

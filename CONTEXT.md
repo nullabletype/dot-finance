@@ -6,6 +6,10 @@ One offline context for allocating responsibility and recording manual settlemen
 
 **Payment account**: The account from which a transaction was paid. It is distinct from responsibility for funding it.
 
+**Source transaction type**: The provider-supplied transaction `Type` value retained exactly during import. It describes the source record but does not by itself decide reconciliation eligibility or funding responsibility.
+
+**Import classification**: A conservative interpretation of an imported row as a purchase candidate, linked refund candidate, excluded transfer, or requiring review. It never assigns funding responsibility.
+
 **Funding source**: Joint, Shared Savings or Personal responsibility for a purchase and its linked refunds.
 
 **Intermediate account**: The account that gathers contributions and pays the entered card target.

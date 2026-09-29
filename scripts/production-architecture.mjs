@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 const rules = {
   'DotFinance.Domain': { references: [], packages: ['Microsoft.NET.ILLink.Tasks'] },
   'DotFinance.Application': { references: ['DotFinance.Domain'], packages: ['Microsoft.NET.ILLink.Tasks'] },
+  'DotFinance.Import': { references: [], packages: ['Microsoft.NET.ILLink.Tasks', 'DocumentFormat.OpenXml', 'DocumentFormat.OpenXml.Framework', 'System.IO.Packaging'] },
   'DotFinance.Storage': { references: ['DotFinance.Application'], packages: ['Microsoft.NET.ILLink.Tasks', 'Microsoft.Data.Sqlite.Core', 'SQLite3MC.PCLRaw.bundle', 'SQLitePCLRaw.core'] },
   'DotFinance.Desktop': { references: ['DotFinance.Application', 'DotFinance.Storage'], packages: ['Microsoft.NET.ILLink.Tasks', 'Avalonia.Desktop', 'Avalonia.Themes.Fluent', 'SkiaSharp', 'SkiaSharp.NativeAssets.Linux', 'SkiaSharp.NativeAssets.WebAssembly', 'HarfBuzzSharp', 'HarfBuzzSharp.NativeAssets.Linux', 'HarfBuzzSharp.NativeAssets.WebAssembly', 'Tmds.DBus.Protocol'] }
 };
@@ -39,6 +40,16 @@ export function validateAdapterConfinement(root = process.cwd()) {
   }
 }
 
+export function validateImportBoundary(root = process.cwd()) {
+  const importRoot = resolve(root, 'src', 'DotFinance.Import');
+  const forbidden = /System\.Net|HttpClient|WebClient|WebRequest|Dns|TcpClient|UdpClient|Socket|NetworkStream|Quic|TelemetryClient|Process\.Start|DllImport|LibraryImport/u;
+  for (const path of readdirSync(importRoot, { recursive: true })
+    .filter(path => path.endsWith('.cs') && !path.startsWith(`obj${sep}`) && !path.startsWith(`bin${sep}`))) {
+    const source = readFileSync(resolve(importRoot, path), 'utf8');
+    if (forbidden.test(source)) throw new Error(`DotFinance.Import: outbound or native execution API is forbidden: ${path}`);
+  }
+}
+
 export function readGraph(root = process.cwd()) {
   const paths = readdirSync(resolve(root, 'src'), { recursive: true })
     .filter(path => path.endsWith('.csproj'));
@@ -62,5 +73,6 @@ export function readGraph(root = process.cwd()) {
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   validateGraph(readGraph());
   validateAdapterConfinement();
+  validateImportBoundary();
   console.log('PASS: evaluated production dependencies and adapter confinement match ADR-0003');
 }
