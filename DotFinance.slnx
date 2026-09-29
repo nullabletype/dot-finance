@@ -3,10 +3,16 @@
     <Project Path="src/DotFinance.Domain/DotFinance.Domain.csproj" />
     <Project Path="src/DotFinance.Application/DotFinance.Application.csproj" />
     <Project Path="src/DotFinance.Desktop/DotFinance.Desktop.csproj" />
+    <Project Path="src/DotFinance.Import/DotFinance.Import.csproj" />
     <Project Path="src/DotFinance.Storage/DotFinance.Storage.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/DotFinance.Domain.Tests/DotFinance.Domain.Tests.csproj" />
+    <Project Path="tests/DotFinance.Import.Tests/DotFinance.Import.Tests.csproj" />
+    <Project Path="tests/DotFinance.ImportInspector.Tests/DotFinance.ImportInspector.Tests.csproj" />
     <Project Path="tests/DotFinance.Storage.Tests/DotFinance.Storage.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/DotFinance.ImportInspector/DotFinance.ImportInspector.csproj" />
   </Folder>
 </Solution>

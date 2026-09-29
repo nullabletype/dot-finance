@@ -1,6 +1,6 @@
 model {
   production = system 'Production application foundation' {
-    description 'One self-contained, trimmed executable per target; native libraries extract privately at runtime. The reconciliation domain and encrypted SQLite3MC persistence are implemented. Application workflow UI and importing remain planned.'
+    description 'One self-contained, trimmed executable per target; native libraries extract privately at runtime. The reconciliation domain, encrypted SQLite3MC persistence and Emma XLSX importer are implemented. Application workflow UI remains planned.'
     desktop = component 'Desktop host' {
       technology 'Avalonia / .NET 10'
       description 'Implemented native window and composition boundary. Contains no user-facing financial workflow; native validation commands exercise the composed vault adapter with synthetic state.'
@@ -20,8 +20,9 @@ model {
       }
       book -> calculation 'Recalculates editable drafts and projects remaining agreed steps'
     }
-    importer = component 'PLANNED import adapter' {
-      description 'Issue #30: verified offline CSV parsing. Not implemented.'
+    importer = component 'Emma import adapter' {
+      technology 'C# / Open XML SDK'
+      description 'Implemented strict Emma XLSX v1 parsing. Preserves all source fields, returns conservative source classifications and review reasons, and rejects unsupported structures without partial records.'
     }
     storage = component 'Encrypted vault adapter' {
       technology 'SQLite3MC / Microsoft.Data.Sqlite'
@@ -40,6 +41,7 @@ model {
     desktop -> application 'Project reference; composes application use cases'
     desktop -> storage 'Composition and native persistence validation commands'
     application -> domain 'Project reference; coordinates financial transitions'
+    importer -> application 'Supplies validated source records to a future workflow consumer; no allocation or settlement decisions'
     storage -> application 'Implements the consumer-owned vault port'
   }
   vaultFiles = system 'Local encrypted vault files' {

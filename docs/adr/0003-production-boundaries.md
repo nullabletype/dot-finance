@@ -15,13 +15,13 @@ Build a single-process, offline desktop application with inward-facing dependenc
 | `DotFinance.Domain` | Financial concepts, calculations, reconciliation transitions and invariants; no I/O | None |
 | `DotFinance.Application` | Coordinates use cases; owns the interfaces it needs for imports, vault access, settings and platform services | Domain |
 | `DotFinance.Desktop` | Avalonia views/presentation, native lifecycle and composition root; desktop dialogs and UI dispatch | Application; concrete adapters at composition only when introduced |
-| `DotFinance.Import` (issue #30) | Validates the verified CSV contract and returns import records; does not decide allocations or settlement | Application, Domain |
+| `DotFinance.Import` (issue #30) | Validates the verified Emma XLSX contract and returns source records with conservative classifications and review reasons; does not decide allocations or settlement | Application, Domain |
 | `DotFinance.Storage` (issue #29) | Encrypted SQLite3MC persistence, migration and atomic backup/restore | Application, Domain |
 | `DotFinance.Settings` (issue #31) | Local non-sensitive preferences such as the theme; never financial state or passwords | Application |
 
 Use `src/` for production and `tests/` for production checks, with a root `DotFinance.slnx`. Issue #27 creates only Domain, Application, Desktop and focused architecture checks. Adapter projects are added with their implementations in the owning issues. Do not add placeholder persistence operations, speculative financial models, or interfaces without a consumer.
 
-Application-owned ports describe use-case needs, not database tables, Avalonia controls or CSV-library types. Domain-owned types describe financial meaning. CSV syntax belongs to Import; reconciliation eligibility and correction decisions belong to Domain. Application coordinates those boundaries. Versioned persistence contracts and recovery semantics are decided under #29 rather than inferred from prototype JSON.
+Application-owned ports describe use-case needs, not database tables, Avalonia controls or XLSX-library types. Domain-owned types describe financial meaning. XLSX syntax and the approved source classification contract belong to Import; configured account identity, reconciliation eligibility, funding responsibility and correction decisions belong to Application and Domain. Application coordinates those boundaries. Versioned persistence contracts and recovery semantics are decided under #29 rather than inferred from prototype JSON.
 
 The Desktop composition root constructs concrete services and supplies them to application/presentation consumers through interfaces. Keep platform-specific UI operations in Desktop; introduce an application port only when an application use case needs one. Avoid a catch-all platform project or a dependency-injection framework until there is a concrete need.
 

@@ -24,7 +24,8 @@
     "production:vault": "node scripts/production-vault-smoke.mjs",
     "production:start": "dotnet run --project src/DotFinance.Desktop/DotFinance.Desktop.csproj",
     "production:architecture": "node scripts/production-architecture.mjs",
-    "domain:mutations": "node scripts/domain-mutations.mjs"
+    "domain:mutations": "node scripts/domain-mutations.mjs",
+    "import:inspect": "node scripts/import-inspector.mjs"
   },
   "devDependencies": {
     "likec4": "1.59.4"

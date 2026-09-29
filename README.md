@@ -45,7 +45,7 @@ The accepted production queue is deliberately dependency-ordered:
 
 Issue #27 establishes the production foundation following the accepted decision record. The remaining items retain native dependency edges; #30 also requires sanitised format evidence from the owner. Issue #34 is a private, owner-operated acceptance gate after the complete workflow and before release packaging: real records stay outside the repository, agents, GitHub, CI, screenshots, logs, and uploaded evidence. Production work continues one ready issue at a time.
 
-The disposable desktop experiments are under [prototypes/DesktopShell](prototypes/DesktopShell/README.md). All displayed amounts and imported records are fictional. Issues #2 and #3 add a bounded synthetic CSV importer, SQLite3MC-encrypted persistence/backup, and a guided reconciliation trial with a pure calculation engine. There is no payment integration, production importer, or running agent controller.
+The disposable desktop experiments are under [prototypes/DesktopShell](prototypes/DesktopShell/README.md). All displayed amounts and imported records are fictional. Issues #2 and #3 add a bounded synthetic CSV importer, SQLite3MC-encrypted persistence/backup, and a guided reconciliation trial with a pure calculation engine. There is no payment integration or running agent controller.
 
 With the .NET 10 SDK selected by `global.json` and a Node release accepted by `package.json` installed:
 
@@ -61,7 +61,7 @@ The full build validates and generates LikeC4 documentation, restores locked .NE
 
 ## Production foundation
 
-[ADR-0003](docs/adr/0003-production-boundaries.md) defines the production boundaries in `DotFinance.slnx`. The minimal Avalonia host is under `src/DotFinance.Desktop`; Application and Domain are dependency boundaries awaiting their feature implementations. No production reconciliation, CSV import or encrypted persistence is implemented yet.
+[ADR-0003](docs/adr/0003-production-boundaries.md) defines the production boundaries in `DotFinance.slnx`. The minimal Avalonia host is under `src/DotFinance.Desktop`; the pure reconciliation domain, encrypted vault, and strict Emma XLSX import adapter are implemented behind separate boundaries. The production desktop workflow does not expose them yet.
 
 ```sh
 npm run production:build
@@ -78,3 +78,9 @@ The full `npm run build` includes production checks alongside the retained proto
 See [single-file feasibility and the extraction decision](docs/development/single-executable-feasibility.md) and [dependency support review](docs/development/production-foundation-support.md).
 
 The production reconciliation domain and its test evidence are described in [the domain implementation record](docs/development/reconciliation-domain.md). Run `npm run domain:mutations` for the six isolated mutation checks; the full build includes them. The current desktop window does not yet expose these domain operations.
+
+## Private import-format inspection
+
+The local [private XLSX export inspector](tools/DotFinance.ImportInspector/README.md) converts an owner-held workbook into a reviewable JSON structure report and a fixed representative synthetic XLSX workbook without writing the input path, worksheet names, arbitrary headers, original cell values, workbook metadata, or exact financial aggregates. Its approved findings underpin the versioned [Emma XLSX import contract](docs/development/emma-xlsx-contract-v1.md). The inspector remains development evidence tooling and is not part of the production application.
+
+The production adapter and its pinned runtime dependencies are covered by the [import dependency support review](docs/development/import-dependencies.md).
