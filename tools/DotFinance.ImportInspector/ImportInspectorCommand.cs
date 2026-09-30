@@ -241,7 +241,13 @@ public static class ImportInspectorCommand
             UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
         };
         using (FileStream stream = new(path, options))
+        {
+            // UnixCreateMode is still masked by the process umask, which can only
+            // clear bits. Normalise the open file to exactly 0600 before writing so
+            // the published report always matches the documented mode.
+            File.SetUnixFileMode(stream.SafeFileHandle, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             stream.Write(content);
+        }
     }
 
     [SupportedOSPlatform("windows")]
