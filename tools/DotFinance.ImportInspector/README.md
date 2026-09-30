@@ -7,7 +7,7 @@ The output directory contains only:
 - `shareable-report.json` (the full inspection report, retained locally): the XLSX container type, Excel date system, allowlisted public header names or position-only replacement tokens, structural cell kinds, broad number-format classes, recognised fixed text-date syntax tokens, and stable validation codes;
 - `synthetic-export.xlsx` (the deliberately minimised shareable report): eight fixed synthetic records using safe generated styles and fixed package timestamps. The row count never reveals whether the source contains transactions.
 
-Both files are created with owner-only permissions: `0600` applied atomically at file creation on macOS and Linux, and an explicit current-user-only access control list on Windows.
+Both files are created with owner-only permissions applied at file creation: `0600` on macOS and Linux, and an explicit current-user-only access control list on Windows.
 
 Only header names from the tool's public specification allowlist are retained. Empty and unexpected headers become `EMPTY_COLUMN_n` or `UNEXPECTED_COLUMN_n`; their source text is discarded. The report does not include worksheet names, workbook properties, author details, custom number-format strings, transaction volume, or value-frequency summaries. The synthetic workbook uses a fixed public worksheet name and does not copy source values, styles, comments, metadata, relationships, or source row counts.
 

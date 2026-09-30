@@ -150,12 +150,12 @@ public static class ImportInspectorCommand
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            error.WriteLine("The sanitised output could not be written.");
+            error.WriteLine($"The sanitised output could not be written. {SharingNotice}");
             return 73;
         }
         catch (Exception)
         {
-            error.WriteLine("The export could not be inspected safely.");
+            error.WriteLine($"The export could not be inspected safely. {SharingNotice}");
             return 70;
         }
         finally
@@ -222,12 +222,13 @@ public static class ImportInspectorCommand
     {
         if (OperatingSystem.IsWindows())
         {
-            // Create the file empty, restrict it, then write so report content is
-            // never present under an inherited access control list.
-            FileStream file = new(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-            file.Dispose();
-            ApplyOwnerOnlyAcl(path);
-            using FileStream stream = new(path, FileMode.Open, FileAccess.Write, FileShare.None);
+            using FileStream stream = new FileInfo(path).Create(
+                FileMode.CreateNew,
+                FileSystemRights.Write,
+                FileShare.None,
+                bufferSize: 4096,
+                FileOptions.None,
+                CreateOwnerOnlySecurity());
             stream.Write(content);
             return;
         }
@@ -244,7 +245,7 @@ public static class ImportInspectorCommand
     }
 
     [SupportedOSPlatform("windows")]
-    private static void ApplyOwnerOnlyAcl(string path)
+    private static FileSecurity CreateOwnerOnlySecurity()
     {
         SecurityIdentifier owner = WindowsIdentity.GetCurrent().User
             ?? throw new InvalidOperationException("The current Windows user identity is unavailable.");
@@ -252,7 +253,7 @@ public static class ImportInspectorCommand
         security.SetOwner(owner);
         security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
         security.AddAccessRule(new FileSystemAccessRule(owner, FileSystemRights.FullControl, AccessControlType.Allow));
-        new FileInfo(path).SetAccessControl(security);
+        return security;
     }
 
     private static string ResolvePhysicalPath(string path)
