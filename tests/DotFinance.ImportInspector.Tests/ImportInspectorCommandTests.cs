@@ -89,6 +89,58 @@ public sealed class ImportInspectorCommandTests
     }
 
     [Fact]
+    public void Run_ValidExport_SetsOwnerOnlyPermissionsOnBothReports()
+    {
+        if (OperatingSystem.IsWindows()) return;
+
+        using TemporaryDirectory temporary = new();
+        string privateDirectory = Path.Combine(temporary.Path, "private");
+        Directory.CreateDirectory(privateDirectory);
+        string input = Path.Combine(privateDirectory, "private-export.xlsx");
+        string outputDirectory = Path.Combine(temporary.Path, "shareable");
+        File.WriteAllBytes(input, TestWorkbookFactory.Create());
+        StringWriter output = new();
+        StringWriter error = new();
+
+        int exitCode = ImportInspectorCommand.Run(["inspect"], output, error, PathReader(input, outputDirectory));
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        foreach (string fileName in new[] { ImportInspectorCommand.ReportFileName, ImportInspectorCommand.SyntheticFileName })
+        {
+            string path = Path.Combine(outputDirectory, fileName);
+            Assert.True(File.Exists(path));
+            Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(path));
+        }
+    }
+
+    [Fact]
+    public void Run_ValidExport_StatesProhibitedDestinationsAndPrivateHandoff()
+    {
+        using TemporaryDirectory temporary = new();
+        string privateDirectory = Path.Combine(temporary.Path, "private");
+        Directory.CreateDirectory(privateDirectory);
+        string input = Path.Combine(privateDirectory, "private-export.xlsx");
+        string outputDirectory = Path.Combine(temporary.Path, "shareable");
+        File.WriteAllBytes(input, TestWorkbookFactory.Create());
+        StringWriter output = new();
+        StringWriter error = new();
+
+        int exitCode = ImportInspectorCommand.Run(["inspect"], output, error, PathReader(input, outputDirectory));
+
+        Assert.Equal(0, exitCode);
+        string console = output.ToString();
+        Assert.Contains("full inspection report", console, StringComparison.Ordinal);
+        Assert.Contains("deliberately minimised report", console, StringComparison.Ordinal);
+        Assert.Contains("private channel", console, StringComparison.Ordinal);
+        Assert.Contains("committed", console, StringComparison.Ordinal);
+        Assert.Contains("uploaded to GitHub", console, StringComparison.Ordinal);
+        Assert.Contains("agent context", console, StringComparison.Ordinal);
+        Assert.Contains("CI logs", console, StringComparison.Ordinal);
+        Assert.Contains("otherwise published", console, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Run_UnsafePrivateInput_EmitsOnlySafeDiagnosticAndReport()
     {
         using TemporaryDirectory temporary = new();

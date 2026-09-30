@@ -4,8 +4,10 @@ This small local tool collects the structural evidence needed by issue #30 witho
 
 The output directory contains only:
 
-- `shareable-report.json`: the XLSX container type, Excel date system, allowlisted public header names or position-only replacement tokens, structural cell kinds, broad number-format classes, recognised fixed text-date syntax tokens, and stable validation codes;
-- `synthetic-export.xlsx`: eight fixed synthetic records using safe generated styles and fixed package timestamps. The row count never reveals whether the source contains transactions.
+- `shareable-report.json` (the full inspection report, retained locally): the XLSX container type, Excel date system, allowlisted public header names or position-only replacement tokens, structural cell kinds, broad number-format classes, recognised fixed text-date syntax tokens, and stable validation codes;
+- `synthetic-export.xlsx` (the deliberately minimised shareable report): eight fixed synthetic records using safe generated styles and fixed package timestamps. The row count never reveals whether the source contains transactions.
+
+Both files are created with owner-only permissions where the platform exposes them: `0600` on macOS and Linux, and the user profile's inherited access control list on Windows.
 
 Only header names from the tool's public specification allowlist are retained. Empty and unexpected headers become `EMPTY_COLUMN_n` or `UNEXPECTED_COLUMN_n`; their source text is discarded. The report does not include worksheet names, workbook properties, author details, custom number-format strings, transaction volume, or value-frequency summaries. The synthetic workbook uses a fixed public worksheet name and does not copy source values, styles, comments, metadata, relationships, or source row counts.
 
@@ -34,7 +36,7 @@ The compressed input limit is 32 MiB. The package is also limited to 2,048 entri
 
 Exit code `0` means the structure was parsed without error findings, `2` means a sanitised report was produced with structural errors, `64` is invalid usage, `66` is an unreadable input file, `70` is a safely contained inspection failure, and `73` is an output failure.
 
-Before sharing anything, inspect `shareable-report.json` in a plain-text editor and open `synthetic-export.xlsx` to confirm that it contains only obviously fictional values. Share those two files, not their containing directory and never the original export.
+Before sharing anything, inspect `shareable-report.json` in a plain-text editor and open `synthetic-export.xlsx` to confirm that it contains only obviously fictional values. Keep the full inspection report (`shareable-report.json`) local and share only the deliberately minimised report (`synthetic-export.xlsx`) through an explicitly private channel after reviewing it. Neither report may be committed, uploaded to GitHub, placed in agent context, copied into CI logs, or otherwise published. Never share the containing directory or the original export.
 
 The JSON report is the authoritative structural observation. The synthetic workbook is a safe representative fixture, not a complete reproduction of every observed cell-kind and number-format combination and not yet the production Emma import contract.
 

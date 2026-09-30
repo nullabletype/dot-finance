@@ -9,6 +9,11 @@ public static class ImportInspectorCommand
     public const string ReportFileName = "shareable-report.json";
     public const string SyntheticFileName = "synthetic-export.xlsx";
 
+    internal const string SharingNotice =
+        "Keep the full inspection report (shareable-report.json) local and share only the deliberately minimised report " +
+        "(synthetic-export.xlsx) through an explicitly private channel after reviewing it. Neither report may be committed, " +
+        "uploaded to GitHub, placed in agent context, copied into CI logs, or otherwise published.";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -130,9 +135,14 @@ public static class ImportInspectorCommand
             if (syntheticBytes is not null)
                 WriteAtomically(Path.Combine(outputDirectory, SyntheticFileName), syntheticBytes);
 
-            output.WriteLine(result.Report.Status == "error"
-                ? "Inspection completed with structural errors. Review and share only the generated sanitised files."
-                : "Inspection completed. Review and share only the generated sanitised files.");
+            if (result.Report.Status == "error")
+            {
+                output.WriteLine($"Inspection completed with structural errors; no synthetic workbook was generated. {SharingNotice}");
+            }
+            else
+            {
+                output.WriteLine($"Inspection completed. {SharingNotice}");
+            }
             return result.Report.Status == "error" ? 2 : 0;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -196,7 +206,10 @@ public static class ImportInspectorCommand
         try
         {
             using (FileStream stream = new(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                RestrictToOwner(temporary);
                 stream.Write(content);
+            }
             File.Move(temporary, path, overwrite: false);
         }
         finally
@@ -204,6 +217,12 @@ public static class ImportInspectorCommand
             CryptographicOperations.ZeroMemory(content);
             if (File.Exists(temporary)) File.Delete(temporary);
         }
+    }
+
+    private static void RestrictToOwner(string path)
+    {
+        if (OperatingSystem.IsWindows()) return;
+        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
 
     private static string ResolvePhysicalPath(string path)
