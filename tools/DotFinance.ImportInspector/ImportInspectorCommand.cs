@@ -1,4 +1,7 @@
+using System.Runtime.Versioning;
+using System.Security.AccessControl;
 using System.Security.Cryptography;
+using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 
@@ -205,11 +208,7 @@ public static class ImportInspectorCommand
         string temporary = Path.Combine(directory, $".{Path.GetFileName(path)}.{Path.GetRandomFileName()}.tmp");
         try
         {
-            using (FileStream stream = new(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            {
-                RestrictToOwner(temporary);
-                stream.Write(content);
-            }
+            WriteRestrictedFile(temporary, content);
             File.Move(temporary, path, overwrite: false);
         }
         finally
@@ -219,10 +218,41 @@ public static class ImportInspectorCommand
         }
     }
 
-    private static void RestrictToOwner(string path)
+    private static void WriteRestrictedFile(string path, byte[] content)
     {
-        if (OperatingSystem.IsWindows()) return;
-        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        if (OperatingSystem.IsWindows())
+        {
+            // Create the file empty, restrict it, then write so report content is
+            // never present under an inherited access control list.
+            FileStream file = new(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            file.Dispose();
+            ApplyOwnerOnlyAcl(path);
+            using FileStream stream = new(path, FileMode.Open, FileAccess.Write, FileShare.None);
+            stream.Write(content);
+            return;
+        }
+
+        FileStreamOptions options = new()
+        {
+            Mode = FileMode.CreateNew,
+            Access = FileAccess.Write,
+            Share = FileShare.None,
+            UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
+        };
+        using (FileStream stream = new(path, options))
+            stream.Write(content);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static void ApplyOwnerOnlyAcl(string path)
+    {
+        SecurityIdentifier owner = WindowsIdentity.GetCurrent().User
+            ?? throw new InvalidOperationException("The current Windows user identity is unavailable.");
+        FileSecurity security = new();
+        security.SetOwner(owner);
+        security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        security.AddAccessRule(new FileSystemAccessRule(owner, FileSystemRights.FullControl, AccessControlType.Allow));
+        new FileInfo(path).SetAccessControl(security);
     }
 
     private static string ResolvePhysicalPath(string path)

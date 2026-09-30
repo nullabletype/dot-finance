@@ -1,3 +1,6 @@
+using System.Runtime.Versioning;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text;
 
 using DocumentFormat.OpenXml.Spreadsheet;
@@ -91,8 +94,6 @@ public sealed class ImportInspectorCommandTests
     [Fact]
     public void Run_ValidExport_SetsOwnerOnlyPermissionsOnBothReports()
     {
-        if (OperatingSystem.IsWindows()) return;
-
         using TemporaryDirectory temporary = new();
         string privateDirectory = Path.Combine(temporary.Path, "private");
         Directory.CreateDirectory(privateDirectory);
@@ -110,8 +111,30 @@ public sealed class ImportInspectorCommandTests
         {
             string path = Path.Combine(outputDirectory, fileName);
             Assert.True(File.Exists(path));
-            Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(path));
+            if (OperatingSystem.IsWindows())
+            {
+                AssertCurrentUserOnlyAcl(path);
+            }
+            else
+            {
+                Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(path));
+            }
         }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static void AssertCurrentUserOnlyAcl(string path)
+    {
+        FileSecurity security = new FileInfo(path).GetAccessControl();
+        Assert.True(security.AreAccessRulesProtected, "The report ACL must not inherit from its parent directory.");
+        List<FileSystemAccessRule> rules = [.. security
+            .GetAccessRules(includeExplicit: true, includeInherited: true, targetType: typeof(SecurityIdentifier))
+            .Cast<FileSystemAccessRule>()];
+        IdentityReference currentUser = WindowsIdentity.GetCurrent().User!;
+        FileSystemAccessRule rule = Assert.Single(rules);
+        Assert.Equal(AccessControlType.Allow, rule.AccessControlType);
+        Assert.Equal(currentUser, rule.IdentityReference);
+        Assert.Equal(FileSystemRights.FullControl, rule.FileSystemRights);
     }
 
     [Fact]
