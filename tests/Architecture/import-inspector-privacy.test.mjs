@@ -31,3 +31,22 @@ test('allows only the pinned Open XML package and keeps outbound networking APIs
     /System\.Net|HttpClient|WebClient|WebRequest|Dns|TcpClient|UdpClient|Socket|NetworkStream|Quic|TelemetryClient|Process\.Start|DllImport|LibraryImport/u,
   );
 });
+
+test('documents the prohibited destinations and the private-channel handoff', () => {
+  const readme = readFileSync('tools/DotFinance.ImportInspector/README.md', 'utf8');
+  const command = readFileSync('tools/DotFinance.ImportInspector/ImportInspectorCommand.cs', 'utf8');
+  const phrases = [
+    'full inspection report',
+    'deliberately minimised report',
+    'private channel',
+    'committed',
+    'uploaded to GitHub',
+    'agent context',
+    'CI logs',
+    'otherwise published',
+  ];
+  for (const phrase of phrases) {
+    assert.ok(readme.includes(phrase), `README must state: ${phrase}`);
+    assert.ok(command.includes(phrase), `command output must state: ${phrase}`);
+  }
+});

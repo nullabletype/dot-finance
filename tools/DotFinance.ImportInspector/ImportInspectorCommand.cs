@@ -1,4 +1,7 @@
+using System.Runtime.Versioning;
+using System.Security.AccessControl;
 using System.Security.Cryptography;
+using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 
@@ -8,6 +11,11 @@ public static class ImportInspectorCommand
 {
     public const string ReportFileName = "shareable-report.json";
     public const string SyntheticFileName = "synthetic-export.xlsx";
+
+    internal const string SharingNotice =
+        "Keep the full inspection report (shareable-report.json) local and share only the deliberately minimised report " +
+        "(synthetic-export.xlsx) through an explicitly private channel after reviewing it. Neither report may be committed, " +
+        "uploaded to GitHub, placed in agent context, copied into CI logs, or otherwise published.";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -130,19 +138,24 @@ public static class ImportInspectorCommand
             if (syntheticBytes is not null)
                 WriteAtomically(Path.Combine(outputDirectory, SyntheticFileName), syntheticBytes);
 
-            output.WriteLine(result.Report.Status == "error"
-                ? "Inspection completed with structural errors. Review and share only the generated sanitised files."
-                : "Inspection completed. Review and share only the generated sanitised files.");
+            if (result.Report.Status == "error")
+            {
+                output.WriteLine($"Inspection completed with structural errors; no synthetic workbook was generated. {SharingNotice}");
+            }
+            else
+            {
+                output.WriteLine($"Inspection completed. {SharingNotice}");
+            }
             return result.Report.Status == "error" ? 2 : 0;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            error.WriteLine("The sanitised output could not be written.");
+            error.WriteLine($"The sanitised output could not be written. {SharingNotice}");
             return 73;
         }
         catch (Exception)
         {
-            error.WriteLine("The export could not be inspected safely.");
+            error.WriteLine($"The export could not be inspected safely. {SharingNotice}");
             return 70;
         }
         finally
@@ -195,8 +208,7 @@ public static class ImportInspectorCommand
         string temporary = Path.Combine(directory, $".{Path.GetFileName(path)}.{Path.GetRandomFileName()}.tmp");
         try
         {
-            using (FileStream stream = new(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                stream.Write(content);
+            WriteRestrictedFile(temporary, content);
             File.Move(temporary, path, overwrite: false);
         }
         finally
@@ -204,6 +216,50 @@ public static class ImportInspectorCommand
             CryptographicOperations.ZeroMemory(content);
             if (File.Exists(temporary)) File.Delete(temporary);
         }
+    }
+
+    internal static void WriteRestrictedFile(string path, byte[] content)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            using FileStream stream = new FileInfo(path).Create(
+                FileMode.CreateNew,
+                FileSystemRights.Write,
+                FileShare.None,
+                bufferSize: 4096,
+                FileOptions.None,
+                CreateOwnerOnlySecurity());
+            stream.Write(content);
+            return;
+        }
+
+        FileStreamOptions options = new()
+        {
+            Mode = FileMode.CreateNew,
+            Access = FileAccess.Write,
+            Share = FileShare.None,
+            UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
+        };
+        using (FileStream stream = new(path, options))
+        {
+            // UnixCreateMode is still masked by the process umask, which can only
+            // clear bits. Normalise the open file to exactly 0600 before writing so
+            // the published report always matches the documented mode.
+            File.SetUnixFileMode(stream.SafeFileHandle, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            stream.Write(content);
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static FileSecurity CreateOwnerOnlySecurity()
+    {
+        SecurityIdentifier owner = WindowsIdentity.GetCurrent().User
+            ?? throw new InvalidOperationException("The current Windows user identity is unavailable.");
+        FileSecurity security = new();
+        security.SetOwner(owner);
+        security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        security.AddAccessRule(new FileSystemAccessRule(owner, FileSystemRights.FullControl, AccessControlType.Allow));
+        return security;
     }
 
     private static string ResolvePhysicalPath(string path)
