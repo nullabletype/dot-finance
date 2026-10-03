@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
@@ -11,6 +12,12 @@ using Xunit;
 
 namespace DotFinance.ImportInspector.Tests;
 
+[CollectionDefinition("Process umask", DisableParallelization = true)]
+public sealed class ProcessUmaskCollection
+{
+}
+
+[Collection("Process umask")]
 public sealed class ImportInspectorCommandTests
 {
     [Theory]
@@ -121,6 +128,35 @@ public sealed class ImportInspectorCommandTests
             }
         }
     }
+
+    [Fact]
+    public void WriteRestrictedFile_RestrictiveUmask_NormalisesUnixPermissions()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
+
+        using TemporaryDirectory temporary = new();
+        string path = Path.Combine(temporary.Path, "report.json");
+        byte[] content = "synthetic report"u8.ToArray();
+
+        const uint allPermissionBits = 0x1FF; // 0777
+        uint previousMask = SetProcessUmask(allPermissionBits);
+        try
+        {
+            ImportInspectorCommand.WriteRestrictedFile(path, content);
+        }
+        finally
+        {
+            _ = SetProcessUmask(previousMask);
+        }
+
+        Assert.Equal(content, File.ReadAllBytes(path));
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(path));
+    }
+
+#pragma warning disable SYSLIB1054 // Test-only primitive binding avoids enabling unsafe code for the project.
+    [DllImport("libc", EntryPoint = "umask")]
+    private static extern uint SetProcessUmask(uint mask);
+#pragma warning restore SYSLIB1054
 
     [SupportedOSPlatform("windows")]
     private static void AssertCurrentUserOnlyAcl(string path)

@@ -218,7 +218,7 @@ public static class ImportInspectorCommand
         }
     }
 
-    private static void WriteRestrictedFile(string path, byte[] content)
+    internal static void WriteRestrictedFile(string path, byte[] content)
     {
         if (OperatingSystem.IsWindows())
         {
