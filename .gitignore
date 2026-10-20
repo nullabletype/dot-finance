@@ -82,12 +82,31 @@ Library/
 # Private runtime data & financial exports: keep real imports here, never in test fixtures
 private-data/
 backups/
+
+# Tabular and spreadsheet exports
 *.csv
 !prototypes/DesktopShell.Tests/Fixtures/*.csv
 !prototypes/DesktopShell/Fixtures/*.csv
 *.tsv
+*.xls
+*.xlsx
+*.xlsm
+*.xlsb
+*.ods
+
+# Financial interchange exports
 *.ofx
+*.qfx
+*.qbo
 *.qif
+*.mt940
+*.sta
+
+# Private inspector and application outputs
+shareable-report.json
+*.dotfinance-backup
+
+# Local databases
 *.db
 *.db-*
 *.sqlite
